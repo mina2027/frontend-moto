@@ -15,6 +15,11 @@ describe('bulk pricing targets', () => {
     const all = vi.fn(async () => [product('p1'), product('p2'), product('p3', 'c2'), product('inactive', 'c1', false)]);
     expect((await bulkPriceTargets({ get: vi.fn(), all }, {}, 'c1')).map((p) => p.id)).toEqual(['p1', 'p2']);
   });
+  it('includes secondary categories without duplicating products or including inactive products', async () => {
+    const multi = { ...product('multi'), categoryIds: ['c1', 'c2', 'c2'] };
+    const all = vi.fn(async () => [multi, product('legacy', 'c2'), product('outside'), { ...product('inactive', 'c1', false), categoryIds: ['c1', 'c2'] }]);
+    expect((await bulkPriceTargets({ get: vi.fn(), all }, {}, 'c2')).map((p) => p.id)).toEqual(['multi', 'legacy']);
+  });
   it('surfaces missing selected products before applying any prices', async () => {
     await expect(bulkPriceTargets({ get: vi.fn().mockRejectedValue(new Error('missing')), all: vi.fn() }, { missing: true }, 'all')).rejects.toThrow('missing');
   });

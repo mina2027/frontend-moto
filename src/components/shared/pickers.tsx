@@ -13,7 +13,7 @@ export interface ComboOption {
   keywords?: string[];
 }
 
-export function Combobox({ value, onChange, options, placeholder, searchPlaceholder, className, disabled, allowClear, size = 'default' }: { value?: string | null; onChange: (v: string | null) => void; options: ComboOption[]; placeholder?: string; searchPlaceholder?: string; className?: string; disabled?: boolean; allowClear?: boolean; size?: 'sm' | 'default' }) {
+export function Combobox({ value, onChange, options, placeholder, searchPlaceholder, className, disabled, allowClear, ariaLabel, size = 'default' }: { value?: string | null; onChange: (v: string | null) => void; options: ComboOption[]; placeholder?: string; searchPlaceholder?: string; className?: string; disabled?: boolean; allowClear?: boolean; ariaLabel?: string; size?: 'sm' | 'default' }) {
   const { t } = useT();
   const [open, setOpen] = React.useState(false);
   const [q, setQ] = React.useState('');
@@ -22,7 +22,7 @@ export function Combobox({ value, onChange, options, placeholder, searchPlacehol
   return (
     <Popover open={open} onOpenChange={(o) => { setOpen(o); if (!o) setQ(''); }}>
       <PopoverTrigger asChild>
-        <Button variant="outline" role="combobox" aria-expanded={open} disabled={disabled} className={cn('w-full justify-between font-normal', size === 'sm' ? 'h-8 text-xs' : 'h-9', !selected && 'text-muted-foreground', className)}>
+        <Button variant="outline" role="combobox" aria-label={ariaLabel} aria-expanded={open} disabled={disabled} className={cn('w-full justify-between font-normal', size === 'sm' ? 'h-8 text-xs' : 'h-9', !selected && 'text-muted-foreground', className)}>
           <span className="truncate">{selected ? selected.label : placeholder ?? t('common.select')}</span>
           <ChevronsUpDown className="ms-2 size-4 shrink-0 opacity-50" />
         </Button>

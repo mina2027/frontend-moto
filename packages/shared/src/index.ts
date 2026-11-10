@@ -5,3 +5,5 @@ export * from './utils';
 export * from './constants';
 export * from './visibility';
 export * from './customerProjection';
+export * from './invoicePage';
+export * from './printProfiles';

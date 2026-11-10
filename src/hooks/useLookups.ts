@@ -20,7 +20,8 @@ export function useLookups() {
   const suppliers = useQuery({ queryKey: ['suppliers', 'all'], queryFn: supplierService.all, staleTime: STALE, enabled: enabled && can(['suppliers.view', 'purchases.view', 'inventory.view']) });
   const warehouses = useQuery({ queryKey: ['warehouses', 'all'], queryFn: () => inventoryService.warehouses(), staleTime: STALE, enabled: enabled && can(['inventory.view', 'sales.create', 'reports.view', 'purchases.view']) });
   const customers = useQuery({ queryKey: ['customers', 'all'], queryFn: customerService.all, staleTime: 60_000, enabled: enabled && can(['customers.view', 'sales.create']) });
-  const products = useQuery({ queryKey: ['products', 'all'], queryFn: () => productService.all(), staleTime: 60_000, enabled: enabled && can(['inventory.view', 'sales.create', 'reports.view', 'purchases.view', 'customers.view']) });
+  // Historical documents still need archived names, but operational pickers only offer live products.
+  const products = useQuery({ queryKey: ['products', 'all', 'history'], queryFn: () => productService.all(undefined, true), staleTime: 60_000, enabled: enabled && can(['inventory.view', 'sales.create', 'reports.view', 'purchases.view', 'customers.view']) });
   const models = useQuery({ queryKey: ['models'], queryFn: productService.models, staleTime: STALE, enabled });
   const expenseCategories = useQuery({ queryKey: ['expenseCategories'], queryFn: branchService.expenseCategories, staleTime: STALE, enabled: enabled && can(['expenses.view', 'expenses.create', 'reports.view', 'cash.close']) });
   const registers = useQuery({ queryKey: ['registers', 'all'], queryFn: () => branchService.registers(), staleTime: STALE, enabled: enabled && can(['cash.open', 'cash.close', 'sales.create']) });
@@ -71,7 +72,7 @@ export function useLookups() {
       warehouses: (warehouses.data ?? []).map((w) => ({ value: w.id, label: tx(w.name) })),
       customers: (customers.data ?? []).filter((c) => c.isActive).map((c) => ({ value: c.id, label: tx(c.name) })),
       // Keywords let a scanned barcode resolve the product in purchases, transfers and stock counts.
-      products: (products.data ?? []).filter((p) => p.isActive).map((p) => ({
+      products: (products.data ?? []).filter((p) => p.isActive && !p.deletedAt).map((p) => ({
         value: p.id,
         label: `${tx(p.name)} (${p.sku})`,
         sublabel: [p.internalBarcode, p.partNumber].filter(Boolean).join(' · '),

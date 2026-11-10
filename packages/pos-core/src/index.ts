@@ -1,5 +1,7 @@
 export * from './adapter';
-export { availablePrintProfiles } from './print/profiles';
+export { availablePrintProfiles, checkoutProfileForSize } from './print/profiles';
+export type { InvoiceSize } from './print/profiles';
+export { InvoiceSizeSelector } from './components/InvoiceSizeSelector';
 export * from './store';
 export * from './i18n';
 export { useScannerWedge } from './hooks/useScannerWedge';
@@ -9,8 +11,6 @@ export { TierChooser, tierBadgeLabel } from './components/TierChooser';
 export { AlternativesDialog } from './components/AlternativesDialog';
 export { PaymentDialog } from './components/PaymentDialog';
 export { CustomerPicker } from './components/CustomerPicker';
-export { QuickGrid } from './components/QuickGrid';
-export { ProductFilterPanel } from './components/ProductFilterPanel';
 export { CashDrawerDialog } from './components/CashDrawerDialog';
 export { CollectDebtDialog } from './components/CollectDebtDialog';
 export { ReturnDialog } from './components/ReturnDialog';

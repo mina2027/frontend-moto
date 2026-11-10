@@ -4,9 +4,10 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { PosLocaleContext, PosTerminal, createPosStore, useConnectivity, usePosT } from '@moto/pos-core';
 import { DEFAULT_SETTINGS, tx } from '@moto/shared';
-import { Alert, Button, Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, cn } from '@moto/ui';
-import { ArrowRightFromLine, Cloud, CloudOff, Languages, Lock, LogOut, RefreshCw } from 'lucide-react';
+import { Alert, Button, Dialog, DialogContent, DialogHeader, DialogTitle, Sheet, SheetContent, SheetHeader, SheetTitle, cn } from '@moto/ui';
+import { ArrowRightFromLine, Cloud, CloudOff, Languages, Lock, RefreshCw } from 'lucide-react';
 import { ErrorState, PageLoading } from '@/components/shared/states';
+import { DeveloperCredit } from '@/components/shared/developer-credit';
 import { api } from '@/services/api';
 import { useAuthStore } from '@/stores/authStore';
 import { useUiStore } from '@/stores/uiStore';
@@ -110,11 +111,15 @@ function PosShell() {
   const noShift = !sessionQ.isPending && !sessionQ.isError && !sessionQ.data;
   const openingShift = noShift && !skipRegister;
   const blocked = locked || closeOpen || statusOpen;
-  const backLabel = locale === 'ar' ? 'العودة إلى ERP' : 'Back to ERP';
+  const exitLabel = locale === 'ar' ? 'الخروج من POS' : 'Exit POS';
+  const exitTarget = session.permissions.includes('reports.view') ? '/dashboard'
+    : session.permissions.includes('sales.view') ? '/sales'
+    : session.permissions.includes('inventory.view') ? '/inventory' : '/alerts';
+  const exitButton = <Button size="xs" variant="outline" onClick={() => navigate(exitTarget)} title={locale === 'ar' ? 'العودة إلى ERP' : 'Back to ERP'}><ArrowRightFromLine /> {exitLabel}</Button>;
 
   return (
     <div className="flex h-dvh flex-col overflow-hidden bg-background">
-      <header className="flex min-h-10 shrink-0 flex-wrap items-center gap-2 border-b bg-card px-3 py-1 text-sm">
+      {!openingShift ? <header className="flex min-h-10 shrink-0 flex-wrap items-center gap-2 border-b bg-card px-3 py-1 text-sm">
         <span className="font-semibold">MotoParts POS</span>
         <span className="num text-xs text-muted-foreground">WEB · v{__APP_VERSION__}</span>
         <button type="button" onClick={() => setStatusOpen(true)} className="ms-2 inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs hover:bg-accent">
@@ -128,26 +133,31 @@ function PosShell() {
           {sessionQ.data && canClose ? <Button size="xs" variant="ghost" onClick={() => setCloseOpen(true)}><Lock /> {p.shell.closeShift}</Button> : null}
           <Button size="icon-xs" variant="ghost" onClick={() => setLocked(true)} aria-label={p.idle.lockNow} title={p.idle.lockNow}><Lock /></Button>
           <Button size="icon-xs" variant="ghost" onClick={() => setLocale(locale === 'ar' ? 'en' : 'ar')} aria-label={p.shell.language}><Languages /></Button>
-          <Button size="icon-xs" variant="ghost" onClick={() => navigate(useAuthStore.getState().hasPermission('reports.view') ? '/dashboard' : '/inventory')} aria-label={backLabel} title={backLabel}><ArrowRightFromLine /></Button>
-          <Button size="icon-xs" variant="ghost" onClick={async () => {
-            try { sessionStorage.removeItem(lockKey); } catch { /* Storage may be unavailable. */ }
-            await useAuthStore.getState().logout();
-            qc.clear();
-          }} aria-label={p.shell.logout}><LogOut /></Button>
+          {exitButton}
         </span>
-      </header>
+      </header> : <div className="flex shrink-0 justify-end border-b bg-card px-3 py-1">{exitButton}</div>}
       {noShift && skipRegister ? <Alert variant="warning" className="rounded-none border-x-0 border-t-0 px-3 py-1.5 text-xs"><span className="flex items-center gap-2">{p.shell.noShiftBanner}<Button size="xs" variant="outline" onClick={() => setSkipRegister(false)}>{p.shell.openShift}</Button></span></Alert> : null}
       <main className="min-h-0 flex-1" {...(blocked ? { inert: '' } : {})} aria-hidden={blocked || undefined}>
         {sessionQ.isPending || settingsQ.isPending ? <PageLoading /> : sessionQ.isError || settingsQ.isError ? <ErrorState onRetry={() => { void sessionQ.refetch(); void settingsQ.refetch(); }} /> : openingShift ? (
           <OpenRegisterScreen branchId={branchId} canOpen={canOpen} onOpened={async (opened) => { qc.setQueryData(['pos', 'session'], opened); setSkipRegister(false); await refreshShift(); }} onSkip={() => setSkipRegister(true)} />
         ) : <PosTerminal adapter={adapter} store={store} verifyBaseUrl={PUBLIC_URL} printOnComplete suspended={blocked} />}
       </main>
-      <Dialog open={statusOpen} onOpenChange={setStatusOpen} modal={!locked}>
-        <DialogContent size="sm">
-          <DialogHeader><DialogTitle>{p.shell.status}</DialogTitle><DialogDescription>{locale === 'ar' ? 'المبيعات تُحفظ مباشرة على السيرفر. إتمام البيع يحتاج اتصالاً بالإنترنت.' : 'Sales are saved directly to the server. Checkout requires an internet connection.'}</DialogDescription></DialogHeader>
-          <Button disabled={!status.online || status.syncing} onClick={() => void adapter.syncNow?.()}><RefreshCw /> {p.shell.reload}</Button>
-        </DialogContent>
-      </Dialog>
+      <DeveloperCredit className="border-t bg-card px-4 py-2" />
+      <Sheet open={statusOpen} onOpenChange={setStatusOpen} modal={!locked}>
+        <SheetContent className="w-[480px] sm:max-w-[480px]">
+          <SheetHeader><SheetTitle className="flex items-center justify-between">
+            <span>{p.shell.sync}</span>
+            <Button size="sm" variant="outline" disabled={!status.online || status.syncing} onClick={() => void adapter.syncNow?.().catch((error: Error) => toast.error(error.message))}><RefreshCw className={status.syncing ? 'animate-spin' : ''} /> {p.shell.syncNow}</Button>
+          </SheetTitle></SheetHeader>
+          <div className="mt-3 grid grid-cols-3 gap-2 text-center text-sm">
+            <div className="rounded-md border p-2"><div className="text-xs text-muted-foreground">{p.shell.status}</div><div className={status.online ? 'text-success' : 'text-destructive'}>{status.online ? p.online : p.offline}</div></div>
+            <div className="rounded-md border p-2"><div className="text-xs text-muted-foreground">{p.shell.waiting}</div><div className="num font-semibold">{status.pending}</div></div>
+            <div className="rounded-md border p-2"><div className="text-xs text-muted-foreground">{p.shell.rejected}</div><div className="num font-semibold">{status.rejected}</div></div>
+          </div>
+          <p className="mt-3 text-xs text-muted-foreground">{locale === 'ar' ? 'المبيعات تُحفظ مباشرة على السيرفر. إتمام البيع يحتاج اتصالاً بالإنترنت.' : 'Sales are saved directly to the server. Checkout requires an internet connection.'}</p>
+          <div className="py-10 text-center text-sm text-muted-foreground">{p.shell.noOps}</div>
+        </SheetContent>
+      </Sheet>
       <Dialog open={closeOpen} onOpenChange={setCloseOpen} modal={!locked}>
         <DialogContent size="sm">
           <DialogHeader><DialogTitle>{p.shell.closeShift}</DialogTitle></DialogHeader>

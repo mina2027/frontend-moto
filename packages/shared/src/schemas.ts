@@ -73,7 +73,7 @@ export const ReturnReasonSchema = z.enum(['defective', 'wrong_item', 'customer_c
 export const AdjustmentReasonSchema = z.enum(['damaged', 'expired', 'lost', 'found', 'count_correction', 'other']);
 export const TransferStatusSchema = z.enum(['draft', 'requested', 'approved', 'sent', 'received', 'completed', 'rejected']);
 export const CashMovementTypeSchema = z.enum(['sale', 'payment_in', 'payment_out', 'expense', 'deposit', 'withdrawal', 'refund']);
-export const PaperKindSchema = z.enum(['thermal80', 'thermal58', 'a4', 'a5']);
+export const PaperKindSchema = z.enum(['thermal80', 'a4']);
 export const PrintDetailSchema = z.enum(['detailed', 'compact']);
 export const AlertTypeSchema = z.enum([
   'low_stock', 'out_of_stock', 'debt_overdue_customer', 'debt_overdue_supplier',
@@ -110,16 +110,19 @@ export const ProductCreateSchema = z.object({
   partNumber: z.string().trim().default(''),
   brandId: IdSchema,
   categoryId: IdSchema,
+  categoryIds: z.array(IdSchema).min(1).max(100).optional(),
   supplierId: z.string().trim().default(''),
   size: z.string().trim().max(60).optional(),
   image: z.string().optional(),
   purchasePrice: MoneySchema.min(0),
   lastPurchaseCost: MoneySchema.min(0).optional(),
   prices: ProductPricesSchema,
+  maxDiscountAmount: MoneySchema.min(0).default(0),
   minStock: z.coerce.number().int().min(0).default(10),
   unit: LocalizedTextLooseSchema.default({ ar: '' }),
   compatibleModelIds: z.array(IdSchema).default([]),
   alternativeProductIds: z.array(IdSchema).default([]),
+  isQuickProduct: z.boolean().default(true),
   isActive: z.boolean().default(true),
   legacyBarcode: z.string().trim().optional(),
   placement: ProductPlacementSchema.optional(),
@@ -189,6 +192,7 @@ export const SaleCreateSchema = z.object({
   invoiceNumber: z.string().optional(),
   date: z.string().optional(),
   offline: z.boolean().optional(),
+  taxSnapshot: z.string().max(2048).optional(),
 });
 
 export const SaleReturnItemSchema = z.object({
@@ -201,6 +205,7 @@ export const SaleReturnItemSchema = z.object({
 });
 export const SaleReturnCreateSchema = z.object({
   saleId: IdSchema,
+  registerSessionId: IdSchema.nullable().optional(),
   items: z.array(SaleReturnItemSchema).min(1),
   refundMethod: PaymentMethodSchema,
   settlement: z.literal('debt_first').optional(),
@@ -385,11 +390,12 @@ export const InvoiceSettingsSchema = z.object({
   footerText: LocalizedTextRequiredSchema,
   showLogo: z.boolean(),
   showTax: z.boolean(),
+  taxEnabled: z.boolean().optional(),
   taxRate: z.number().min(0).max(100),
   allowNegativeStock: z.boolean(),
 });
 export const ReceiptSettingsSchema = z.object({
-  paperWidth: z.union([z.literal(58), z.literal(80)]),
+  paperWidth: z.literal(80),
   showBarcode: z.boolean(),
   showCashier: z.boolean(),
   showCustomerBalance: z.boolean(),
@@ -413,7 +419,7 @@ export const PosSettingsSchema = z.object({
   defaultPaymentMethod: PaymentMethodSchema,
   autoPrint: z.boolean(),
   requireCustomerForCredit: z.boolean(),
-  maxDiscountPercent: z.number().min(0).max(100),
+  maxDiscountAmount: z.number().min(0),
   soundOnScan: z.boolean(),
   openDrawerOnSale: z.boolean(),
   defaultPriceTier: PriceTierSchema,
@@ -433,7 +439,7 @@ export const AlertSettingsSchema = z.object({
   largeReturnAmount: z.number().min(0),
   maxReturnsPerCashierPerDay: z.number().int().min(0),
   registerVarianceAmount: z.number().min(0),
-  unusualDiscountPercent: z.number().min(0).max(100).default(25),
+  unusualDiscountAmount: z.number().min(0).default(25),
   maxVoidsPerCashierPerDay: z.number().int().min(0).default(3),
   whatsappManagerPhone: z.string(),
   whatsappOnCritical: z.boolean(),
@@ -546,6 +552,7 @@ export const SyncOpSchema = z.object({
   type: SyncOpTypeSchema,
   clientCreatedAt: z.string(),
   payload: z.unknown(),
+  saleAmounts: z.object({ tax: MoneySchema.min(0), total: MoneySchema.min(0) }).optional(),
 });
 export const SyncPushSchema = z.object({ terminalId: IdSchema, ops: z.array(SyncOpSchema).min(1).max(200) });
 export const SyncPullQuerySchema = z.object({ since: z.string().optional(), branchId: IdSchema });

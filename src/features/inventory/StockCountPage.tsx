@@ -35,7 +35,7 @@ export default function StockCountPage() {
   return (
     <div>
       <PageHeader backTo="/inventory?tab=counts" title={<span className="num">{c.code}</span>} badge={<StatusBadge status={c.status} label={c.status === 'draft' ? t('common.draft') : c.status === 'in_progress' ? t('common.pending') : t('common.completed')} />} subtitle={`${branchName(c.branchId)} · ${warehouseName(c.warehouseId)} · ${formatDateTime(c.date, locale)}`}
-        actions={editable ? <Button onClick={() => setConfirm(true)} disabled={done === 0}><ClipboardCheck /> {t('inventory.finishCount')}</Button> : null} />
+        actions={editable ? <Button onClick={() => setConfirm(true)} disabled={done !== c.items.length}><ClipboardCheck /> {t('inventory.finishCount')}</Button> : null} />
       <div className="grid gap-3 sm:grid-cols-3">
         <StatCard title={t('common.items')} value={`${done} / ${c.items.length}`} icon={<ClipboardCheck />} />
         <StatCard title={t('inventory.variance')} value={variances.length} format="number" icon={<ClipboardCheck />} variant={variances.length ? 'warning' : 'success'} />

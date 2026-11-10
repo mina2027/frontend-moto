@@ -7,11 +7,12 @@ export type { ProductQuery, ProductWithStock };
 
 export const productService = {
   list: (q: ProductQuery = {}): Promise<Paginated<ProductWithStock>> => api.products.list(q),
-  all: (branchId?: ID): Promise<ProductWithStock[]> => api.products.all(branchId),
+  all: (branchId?: ID, includeDeleted = false): Promise<ProductWithStock[]> => api.products.all(branchId, includeDeleted),
   get: (id: ID): Promise<ProductWithStock> => api.products.get(id),
   lookup: (term: string, branchId?: ID, limit = 12): Promise<ProductWithStock[]> => api.products.lookup(term, branchId, limit),
   create: (input: ProductCreateInput): Promise<ProductWithStock> => api.products.create(input),
   update: (id: ID, patch: ProductUpdateInput, _userId?: ID, reason?: string): Promise<ProductWithStock> => api.products.update(id, { ...patch, changeReason: reason ?? patch.changeReason }),
+  delete: (id: ID): Promise<{ ok: true }> => api.products.delete(id),
   bulkUpdate: async (ids: ID[], patch: ProductUpdateInput): Promise<number> => (await api.products.bulkUpdate(ids, patch)).count,
   stockLevels: (productId: ID): Promise<StockLevel[]> => api.products.stockLevels(productId),
   priceHistory: (query: { productId?: ID; userId?: ID; field?: string; branchId?: ID; from?: string; to?: string } = {}): Promise<PriceHistoryEntry[]> => api.products.priceHistory(query),

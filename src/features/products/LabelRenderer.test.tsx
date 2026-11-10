@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import { DEFAULT_SETTINGS, defaultLabelTemplate, mmToPx } from '@moto/shared';
+import { DEFAULT_SETTINGS, defaultLabelTemplate } from '@moto/shared';
 import type { Product } from '@/types';
 import { LabelRenderer } from './LabelRenderer';
 
@@ -23,12 +23,24 @@ const product = {
 } as unknown as Product;
 
 describe('LabelRenderer', () => {
-  it('renders at exact mm → px size for the template dpi', () => {
-    const t = defaultLabelTemplate();
+  it.each([203, 300, 600])('keeps physical label dimensions at %s printer DPI', (dpi) => {
+    const t = { ...defaultLabelTemplate(), dpi };
     const { container } = render(<LabelRenderer template={t} product={product} settings={DEFAULT_SETTINGS} />);
     const root = container.firstElementChild as HTMLElement;
-    expect(parseFloat(root.style.width)).toBeCloseTo(mmToPx(50, 203), 3);
-    expect(parseFloat(root.style.height)).toBeCloseTo(mmToPx(25, 203), 3);
+    expect(root.style.width).toBe('50mm');
+    expect(root.style.height).toBe('25mm');
+    const name = screen.getByText('فلتر زيت').parentElement!;
+    expect(name.style.left).toBe('1mm');
+    expect(name.style.fontSize).toBe('7pt');
+  });
+
+  it('zooms the designer preview without changing its physical print sizing', () => {
+    const t = defaultLabelTemplate();
+    const { container } = render(<LabelRenderer template={t} product={product} settings={DEFAULT_SETTINGS} scale={5} />);
+    const root = container.firstElementChild as HTMLElement;
+    expect(root.style.width).toBe('250px');
+    expect(root.style.height).toBe('125px');
+    expect(screen.getByText('فلتر زيت').parentElement!.style.left).toBe('5px');
   });
 
   it('shows company, product name (Arabic), tier price and barcode; hidden elements are skipped', () => {

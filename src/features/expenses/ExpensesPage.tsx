@@ -38,18 +38,20 @@ export default function ExpensesPage() {
   const expensesQuery = { ...ls.query, branchId, categoryId: ls.filters.categoryId, status: ls.filters.status as Expense['status'] | undefined, from, to };
   const q = useQuery({ queryKey: ['expenses', ls.query, branchId, from, to], queryFn: () => branchService.expenses(expensesQuery) });
   const stats = useQuery({ queryKey: ['expenses', 'stats', branchId], queryFn: () => branchService.expenseStats(branchId) });
-  const regs = useQuery({ queryKey: ['registers', currentBranch], queryFn: () => branchService.registers(currentBranch) });
 
   const schema = z.object({ categoryId: z.string().min(1, t('validation.required')), amount: z.coerce.number().positive(t('validation.positive')), branchId: z.string().min(1), registerId: z.string().optional(), descAr: z.string().optional(), descEn: z.string().optional(), receiptRef: z.string().optional() });
   type F = z.infer<typeof schema>;
   const form = useForm<F>({ resolver: zodResolver(schema), defaultValues: { categoryId: '', amount: 0, branchId: currentBranch, registerId: 'none', descAr: '', descEn: '', receiptRef: '' } });
+  const formBranch = form.watch('branchId');
+  const regs = useQuery({ queryKey: ['registers', formBranch], queryFn: () => branchService.registers(formBranch) });
+  React.useEffect(() => { form.setValue('registerId', 'none'); }, [formBranch, form]);
   const submit = form.handleSubmit(async (v) => {
     await branchService.createExpense({ categoryId: v.categoryId, amount: v.amount, branchId: v.branchId, registerId: v.registerId && v.registerId !== 'none' ? v.registerId : null, description: { ar: v.descAr ?? '', en: v.descEn || v.descAr }, userId: user.id, receiptRef: v.receiptRef });
     toast.success(t('expenses.expenseAdded'));
-    qc.invalidateQueries({ queryKey: ['expenses'] }); qc.invalidateQueries({ queryKey: ['sessions'] });
+    qc.invalidateQueries({ queryKey: ['expenses'] }); qc.invalidateQueries({ queryKey: ['sessions'] }); qc.invalidateQueries({ queryKey: ['pos', 'session'] });
     setAddOpen(false); form.reset();
   });
-  const setStatus = async (id: string, status: Expense['status']) => { await branchService.setExpenseStatus(id, status); toast.success(t('common.updated')); q.refetch(); stats.refetch(); };
+  const setStatus = async (id: string, status: Expense['status']) => { await branchService.setExpenseStatus(id, status); toast.success(t('common.updated')); q.refetch(); stats.refetch(); qc.invalidateQueries({ queryKey: ['sessions'] }); qc.invalidateQueries({ queryKey: ['pos', 'session'] }); };
 
   const columns = React.useMemo<ColumnDef<Expense, unknown>[]>(() => [
     { accessorKey: 'code', header: t('common.code'), cell: ({ row }) => <span className="num text-xs text-muted-foreground">{row.original.code}</span> },

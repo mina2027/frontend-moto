@@ -15,7 +15,7 @@ import { useAuthStore } from '@/stores/authStore';
 import { useLookups } from '@/hooks/useLookups';
 import { useSettings } from '@/hooks/useSettings';
 import { useT } from '@/i18n';
-import { stockStatusOf } from '@moto/shared';
+import { productCategoryIds, stockStatusOf } from '@moto/shared';
 import { exportXlsx, type ExportPayload } from '@/lib/export';
 
 export default function ProductsListPage() {
@@ -46,7 +46,7 @@ export default function ProductsListPage() {
   }, [all.data, query.branchId]);
 
   const columns = React.useMemo<ColumnDef<ProductWithStock, unknown>[]>(() => [
-    { id: 'name', header: t('common.product'), cell: ({ row }) => <div className="flex items-center gap-2"><div className="flex size-8 shrink-0 items-center justify-center rounded bg-muted text-muted-foreground"><Package className="size-4" /></div><div className="min-w-0"><Link to={`/products/${row.original.id}`} className="block truncate font-medium hover:underline" onClick={(e) => e.stopPropagation()}>{tx(row.original.name)}</Link><div className="text-[11px] text-muted-foreground">{brandName(row.original.brandId)} · {categoryName(row.original.categoryId)}{row.original.size ? <span className="num"> · {row.original.size}</span> : null}</div></div></div> },
+    { id: 'name', header: t('common.product'), cell: ({ row }) => <div className="flex items-center gap-2"><div className="flex size-8 shrink-0 items-center justify-center rounded bg-muted text-muted-foreground"><Package className="size-4" /></div><div className="min-w-0"><Link to={`/products/${row.original.id}`} className="block truncate font-medium hover:underline" onClick={(e) => e.stopPropagation()}>{tx(row.original.name)}</Link><div className="text-[11px] text-muted-foreground">{brandName(row.original.brandId)} · {productCategoryIds(row.original).map(categoryName).join('، ')}{row.original.size ? <span className="num"> · {row.original.size}</span> : null}</div></div></div> },
     { accessorKey: 'sku', header: t('common.sku'), cell: ({ row }) => <span className="num text-xs">{row.original.sku}</span> },
     { accessorKey: 'internalBarcode', header: t('common.barcode'), cell: ({ row }) => <div className="num text-xs"><div>{row.original.internalBarcode}</div>{row.original.legacyBarcode ? <div className="text-[10px] text-muted-foreground" title={t('upgrade.legacyBarcode')}>{row.original.legacyBarcode}</div> : null}</div> },
     { accessorKey: 'partNumber', header: t('common.partNumber'), cell: ({ row }) => <span className="num text-xs">{row.original.partNumber}</span> },
@@ -72,7 +72,7 @@ export default function ProductsListPage() {
     { header: t('common.barcode'), value: (p) => p.internalBarcode },
     { header: t('common.partNumber'), value: (p) => p.partNumber },
     { header: t('common.brand'), value: (p) => brandName(p.brandId) },
-    { header: t('common.category'), value: (p) => categoryName(p.categoryId) },
+    { header: t('products.categories'), value: (p) => productCategoryIds(p).map(categoryName).join('، ') },
     ...(canCost ? [{ header: t('common.cost'), value: (p: ProductWithStock) => p.lastPurchaseCost, numeric: true }] : []),
     { header: tx(tierLabels.retail1), value: (p) => p.prices.retail1, numeric: true },
     { header: tx(tierLabels.retail2), value: (p) => p.prices.retail2, numeric: true },

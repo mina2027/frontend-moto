@@ -22,6 +22,7 @@ export interface TierChooserProps {
  */
 export function TierChooser({ open, onOpenChange, prices, current, specialPrice, settings, allowedTiers, onPick, children }: TierChooserProps) {
   const { p, tx, locale } = usePosT();
+  const triggerRef = React.useRef<HTMLButtonElement>(null);
   React.useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
@@ -42,8 +43,8 @@ export function TierChooser({ open, onOpenChange, prices, current, specialPrice,
 
   return (
     <Popover open={open} onOpenChange={onOpenChange}>
-      <PopoverTrigger asChild>{children}</PopoverTrigger>
-      <PopoverContent align="end" className="w-72 p-2" onOpenAutoFocus={(e) => e.preventDefault()}>
+      <PopoverTrigger asChild ref={triggerRef}>{children}</PopoverTrigger>
+      <PopoverContent align="end" className="w-72 p-2" onOpenAutoFocus={(e) => e.preventDefault()} onCloseAutoFocus={(e) => { e.preventDefault(); triggerRef.current?.focus({ preventScroll: true }); }}>
         <div className="mb-1.5 text-xs font-medium text-muted-foreground">{p.selectPrice}</div>
         <div className={cn('grid gap-1.5', allowedTiers.length >= 3 ? 'grid-cols-3' : 'grid-cols-2')}>
           {allowedTiers.map((tier: PriceTier, i) => {

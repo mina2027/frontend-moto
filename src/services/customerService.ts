@@ -2,6 +2,7 @@ import type { Customer, CustomerPayment, CustomerType, DebtStatus, ID, ListQuery
 import type { CustomerSaveInput } from '@moto/shared';
 import type { DebtRow } from '@moto/api-client';
 import { api } from './api';
+import { retryableWrite } from '@/lib/retryableWrite';
 
 export type { DebtRow };
 
@@ -24,6 +25,6 @@ export const customerService = {
   recordPayment: (input: { customerId: ID; debtId: ID | null; amount: number; method: PaymentMethod; reference: string; userId?: ID; branchId: ID; notes?: string }): Promise<CustomerPayment> => {
     const { userId: _u, ...rest } = input;
     void _u;
-    return api.customers.recordPayment(rest);
+    return retryableWrite(`erp:payment:${rest.customerId}`, rest, key => api.customers.recordPayment(rest, key));
   },
 };

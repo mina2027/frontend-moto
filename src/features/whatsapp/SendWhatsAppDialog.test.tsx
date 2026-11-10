@@ -6,9 +6,9 @@ import type { Customer } from '@/types';
 import { toast } from 'sonner';
 import { SendWhatsAppDialog } from './SendWhatsAppDialog';
 
-const mocks = vi.hoisted(() => ({ send: vi.fn(), stats: vi.fn() }));
+const mocks = vi.hoisted(() => ({ send: vi.fn(), stats: vi.fn(), templates: vi.fn() }));
 vi.mock('@/services', () => ({
-  whatsappService: { send: mocks.send, stats: mocks.stats, templates: async () => [{ key: 'statement', name: { ar: 'Statement' }, body: { ar: 'Hello {customer}' }, isActive: true }] },
+  whatsappService: { send: mocks.send, stats: mocks.stats, templates: mocks.templates },
   customerService: { debts: async () => ({ data: [] }) },
 }));
 vi.mock('@/hooks/useSettings', () => ({ useSettings: () => ({ settings: DEFAULT_SETTINGS }) }));
@@ -17,7 +17,11 @@ vi.mock('@/stores/authStore', () => ({ useAuthStore: (selector: (state: unknown)
 vi.mock('@/i18n', () => ({ useT: () => ({ t: (key: string) => key, tx: (value: { ar: string }) => value?.ar ?? '', locale: 'en' }) }));
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 const customer = { id: 'c1', name: { ar: 'Customer' }, whatsapp: '201000000000', balance: 0 } as Customer;
-beforeEach(() => { vi.clearAllMocks(); mocks.stats.mockResolvedValue({ mode: 'web' }); });
+beforeEach(() => {
+  vi.clearAllMocks();
+  mocks.stats.mockResolvedValue({ mode: 'web' });
+  mocks.templates.mockResolvedValue([{ key: 'statement', name: { ar: 'Statement' }, body: { ar: 'Hello {customer}' }, isActive: true }]);
+});
 afterEach(cleanup);
 async function mount() {
   const close = vi.fn();
@@ -26,6 +30,21 @@ async function mount() {
   return close;
 }
 describe('WhatsApp send outcomes', () => {
+  it('uses the customer page paginated debt cache while closed and when reopened', async () => {
+    mocks.templates.mockResolvedValue([{ key: 'statement', name: { ar: 'Statement' }, body: { ar: 'Hello {customer} {invoice} {remaining}' }, isActive: true }]);
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
+    const key = ['debts', { customerId: customer.id }];
+    const cached = { data: [{ id: 'debt-1', customerId: customer.id, invoiceNumber: 'INV-CACHED', originalAmount: 100, paidAmount: 70, remaining: 30, dueDate: '2026-10-01' }], total: 1, page: 1, pageSize: 100 };
+    queryClient.setQueryData(key, cached);
+    const dialog = (open: boolean) => <QueryClientProvider client={queryClient}><SendWhatsAppDialog open={open} onOpenChange={vi.fn()} customer={customer} /></QueryClientProvider>;
+    const { rerender } = render(dialog(false));
+    await waitFor(() => expect(queryClient.getQueryData(['whatsapp', 'templates'])).toBeDefined());
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    rerender(dialog(true));
+    await waitFor(() => expect((screen.getByRole('textbox') as HTMLTextAreaElement).value).toContain('INV-CACHED'));
+    expect(queryClient.getQueryData(key)).toEqual(cached);
+  });
+
   it('keeps a failed message open and reports its error', async () => {
     mocks.send.mockResolvedValue({ status: 'failed', error: 'Provider unavailable' });
     const close = await mount();

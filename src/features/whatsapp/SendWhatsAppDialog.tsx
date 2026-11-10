@@ -33,7 +33,12 @@ export function SendWhatsAppDialog({ open, onOpenChange, customer, sale, default
   const templates = useQuery({ queryKey: ['whatsapp', 'templates'], queryFn: whatsappService.templates });
 
   const cust = customerId ? customers.find((c) => c.id === customerId) ?? (customer?.id === customerId ? customer : null) : null;
-  const debtsQ = useQuery({ queryKey: ['debts', { customerId: cust?.id }], queryFn: () => customerService.debts({ customerId: cust!.id, pageSize: 100 }).then((r) => r.data), enabled: open && !!cust });
+  const debtsQ = useQuery({
+    queryKey: ['debts', { customerId: cust?.id }],
+    queryFn: () => customerService.debts({ customerId: cust!.id, pageSize: 100 }),
+    select: (response) => response.data,
+    enabled: open && !!cust,
+  });
 
   React.useEffect(() => { if (open) { setCustomerId(customer?.id ?? null); setTemplateKey(defaultTemplate ?? (sale ? 'invoice' : 'statement')); setEdited(false); } }, [open, customer, sale, defaultTemplate]);
 

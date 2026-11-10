@@ -14,6 +14,7 @@ import { inventoryService } from '@/services';
 import { useAuthStore } from '@/stores/authStore';
 import { useLookups } from '@/hooks/useLookups';
 import { useT } from '@/i18n';
+import { productCategoryIds } from '@moto/shared';
 
 export function StockCountDialog({ open, onOpenChange, initialProductIds = [], initialBranchId, initialWarehouseId }: { open: boolean; onOpenChange: (o: boolean) => void; initialProductIds?: string[]; initialBranchId?: string; initialWarehouseId?: string }) {
   const { t, tx } = useT();
@@ -44,7 +45,7 @@ export function StockCountDialog({ open, onOpenChange, initialProductIds = [], i
   const whs = warehouses.filter((w) => w.branchId === v.branchId);
   React.useEffect(() => { if (!whs.some((w) => w.id === v.warehouseId)) { const id = firstWarehouse(v.branchId); if (id !== v.warehouseId) form.setValue('warehouseId', id); } }, [v.branchId, v.warehouseId, whs, firstWarehouse, form]);
 
-  const selected = products.filter((p) => p.isActive && (v.scope === 'all' || (v.scope === 'selected' ? initialProductIds.includes(p.id) : v.categoryIds.includes(p.categoryId))));
+  const selected = products.filter((p) => p.isActive && (v.scope === 'all' || (v.scope === 'selected' ? initialProductIds.includes(p.id) : productCategoryIds(p).some(id => v.categoryIds.includes(id)))));
   const remainingCategories = options.categories.filter((c) => !v.categoryIds.includes(c.value));
 
   const submit = form.handleSubmit(async (d) => {

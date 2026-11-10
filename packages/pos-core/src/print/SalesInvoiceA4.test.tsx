@@ -10,7 +10,10 @@ describe('SalesInvoiceA4', () => {
     const { container } = render(<SalesInvoiceA4 invoice={SAMPLE_INVOICE} store={SAMPLE_STORE} />);
     const root = container.querySelector('.mpi')!;
     expect(root.getAttribute('dir')).toBe('rtl');
-    expect(root.querySelector('style')!.textContent).toContain('url(data:font/woff2;base64,');
+    const styles = root.querySelector('style')!.textContent!;
+    expect(styles).toContain('url(data:font/woff2;base64,');
+    expect(styles).not.toContain('watermark');
+    expect(root.querySelector('.mpi-watermark')).toBeNull();
     expect(screen.getByText('فاتورة مبيعات')).toBeTruthy();
     expect(screen.getAllByText('INV-011550').length).toBeGreaterThan(0);
     expect(root.querySelectorAll('tbody tr')).toHaveLength(6);

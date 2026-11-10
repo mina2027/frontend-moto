@@ -33,6 +33,19 @@ const catalog: PosProduct[] = [
   prod('4', { name: { ar: 'زيت محرك' }, brandId: 'honda', categoryId: 'oil', isActive: false }),
   prod('5', { name: { ar: 'إطار أمامي' }, brandId: 'honda', categoryId: 'tires', size: '90/90-17', prices: { retail1: 950, retail2: 900, wholesale: 850 }, available: 30 }),
 ];
+
+it('matches every assigned category and their parents without duplicating a product', () => {
+  const multi = prod('multi', { categoryId: 'brakes', categoryIds: ['brakes', 'electric-child', 'electric-child'] });
+  const categories: Category[] = [
+    { id: 'electric', name: { ar: 'كهرباء' }, parentId: null, ancestors: [], sortOrder: 0, isActive: true },
+    { id: 'electric-child', name: { ar: 'إشعال' }, parentId: 'electric', ancestors: ['electric'], sortOrder: 0, isActive: true },
+  ];
+  for (const categoryId of ['brakes', 'electric-child', 'electric']) {
+    expect(filterCatalog([multi], { ...EMPTY_FILTERS, categoryId }, { categories }).map(p => p.id)).toEqual(['multi']);
+  }
+  expect(filterCatalog([prod('legacy')], { ...EMPTY_FILTERS, categoryId: 'c1' }).map(p => p.id)).toEqual(['legacy']);
+  expect(filterCatalog([multi], { ...EMPTY_FILTERS, categoryId: 'oil' }, { categories })).toEqual([]);
+});
 const cat = (id: string, ar: string, parentId: string | null, sortOrder: number): Category => ({ id, name: { ar }, parentId, ancestors: parentId ? [parentId] : [], sortOrder, isActive: true });
 const categories: Category[] = [
   cat('brakes', 'فرامل', null, 0),

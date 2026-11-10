@@ -25,6 +25,20 @@ export function round2(n: number): number {
   return Math.round((n + Number.EPSILON) * 100) / 100;
 }
 
+/** Fixed discounts apply to the whole line; percentage discounts follow price and quantity. */
+export function saleLineDiscount(line: { unitPrice: number; quantity: number; discount?: number; discountPercent?: number }): number {
+  return round2(line.discount || (line.unitPrice * line.quantity * (line.discountPercent ?? 0)) / 100);
+}
+
+/** Includes the primary category so legacy products work without a data migration. */
+export function productCategoryIds(product: Pick<Product, 'categoryId' | 'categoryIds'> | null | undefined): string[] {
+  return [...new Set([...(product?.categoryId ? [product.categoryId] : []), ...(product?.categoryIds ?? [])])];
+}
+
+export function invoiceTaxRate(invoice: { taxEnabled?: boolean; showTax: boolean; taxRate: number }): number {
+  return (invoice.taxEnabled ?? invoice.showTax) ? invoice.taxRate : 0;
+}
+
 /** Share of a sale's net line total the customer actually paid (after invoice discount, incl. tax). */
 export function refundFactor(sale: { subtotal: number; itemDiscounts: number; total: number }): number {
   const net = round2(sale.subtotal - sale.itemDiscounts);

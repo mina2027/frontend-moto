@@ -3,10 +3,9 @@ import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useForm, type FieldValues, type DefaultValues } from 'react-hook-form';
 import { toast } from 'sonner';
-import { BarChart3, Barcode as BarcodeIcon, Bell, BellRing, Building2, Coins, FileText, Globe, GripVertical, LayoutGrid, Monitor, MonitorSmartphone, Palette, Pencil, Plus, Printer, Receipt, Settings2, ShieldCheck, Sparkles, Store, Tags, Trash2, Upload, X } from 'lucide-react';
+import { BarChart3, Barcode as BarcodeIcon, Bell, BellRing, Building2, Coins, FileText, Globe, Monitor, MonitorSmartphone, Palette, Pencil, Plus, Printer, Receipt, Settings2, ShieldCheck, Store, Tags, Trash2, Upload } from 'lucide-react';
 import { PAPER_SIZES, ALERT_TYPES, PRICE_TIERS, type PrintProfileSaveInput } from '@moto/shared';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -14,20 +13,19 @@ import { Alert } from '@/components/ui/misc';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { PageHeader, Section } from '@/components/shared/page';
 import { FormField, FormGrid, SelectField, SwitchField, TextField } from '@/components/shared/form';
-import { Combobox } from '@/components/shared/pickers';
 import { ConfirmDialog } from '@/components/shared/confirm-dialog';
 import { PageLoading } from '@/components/shared/states';
 import { Receipt as ReceiptPreview } from '@/features/sales/receipt';
-import { settingsService, salesService, reportService, devicePrintPref, whatsappService } from '@/services';
+import { settingsService, salesService, devicePrintPref, whatsappService } from '@/services';
 import { useAuthStore } from '@/stores/authStore';
 import { useUiStore } from '@/stores/uiStore';
 import { useLookups } from '@/hooks/useLookups';
 import { useT } from '@/i18n';
 import { cn, formatDateTime } from '@/lib/utils';
-import type { AppSettings, AlertType, PaperKind, PriceTier, PrintDetail, PrintProfile, QuickCategory, QuickProduct, Sale } from '@/types';
+import type { AppSettings, AlertType, PaperKind, PriceTier, PrintDetail, PrintProfile, Sale } from '@/types';
 
 const TIER_LABEL_KEY: Record<PriceTier, string> = { retail1: 'upgrade.tierRetail1', retail2: 'upgrade.tierRetail2', wholesale: 'upgrade.tierWholesale' };
-const PAPER_KINDS: PaperKind[] = ['thermal80', 'thermal58', 'a4', 'a5'];
+const PAPER_KINDS: PaperKind[] = ['thermal80', 'a4'];
 const PRINT_DETAILS: PrintDetail[] = ['detailed', 'compact'];
 
 function errorMessage(e: unknown, fallback: string) {
@@ -204,167 +202,6 @@ function PrintingTab({ sampleSale, canEdit }: { sampleSale: Sale | null; canEdit
   );
 }
 
-// ---------- Quick grid ----------
-function QuickGridTab({ canEdit }: { canEdit: boolean }) {
-  const { t, tx } = useT();
-  const qc = useQueryClient();
-  const user = useAuthStore((s) => s.session!.user);
-  const canAll = useAuthStore((s) => s.hasPermission('branches.all'));
-  const { products: allProducts, productName, options } = useLookups();
-  const [scope, setScope] = React.useState<string>('global');
-  const branchId = scope === 'global' ? null : scope;
-  const scopeBranches = canAll ? options.activeBranches : options.activeBranches.filter((b) => b.value === user.branchId);
-  const [selectedCat, setSelectedCat] = React.useState<string | null>(null);
-  const [newCat, setNewCat] = React.useState('');
-  // A group may simply be a name, or be tied to a catalog department / motorcycle model so it can be auto-filled.
-  const [catSource, setCatSource] = React.useState<{ kind: 'none' | 'category' | 'model'; id: string | null }>({ kind: 'none', id: null });
-  const [search, setSearch] = React.useState('');
-  const [dragId, setDragId] = React.useState<string | null>(null);
-
-  const categoriesQ = useQuery({ queryKey: ['quick', 'categories', branchId], queryFn: () => settingsService.quickCategories(branchId ?? undefined) });
-  const productsQ = useQuery({ queryKey: ['quick', 'products', branchId], queryFn: () => settingsService.quickProducts(branchId ?? undefined) });
-  const categories: QuickCategory[] = React.useMemo(() => (categoriesQ.data ?? []).filter((c) => c.branchId === branchId).sort((a, b) => a.order - b.order), [categoriesQ.data, branchId]);
-  const activeCat = categories.find((c) => c.id === selectedCat) ?? categories[0] ?? null;
-  const items: QuickProduct[] = React.useMemo(() => (productsQ.data ?? []).filter((p) => p.branchId === branchId && p.categoryId === (activeCat?.id ?? null)).sort((a, b) => a.order - b.order), [productsQ.data, branchId, activeCat]);
-
-  const invalidate = () => qc.invalidateQueries({ queryKey: ['quick'] });
-  const onError = (e: unknown) => toast.error(errorMessage(e, t('common.error')));
-  const addCat = useMutation({
-    mutationFn: (name: string) => settingsService.saveQuickCategory({
-      name: { ar: name },
-      order: categories.length,
-      branchId,
-      sourceCategoryId: catSource.kind === 'category' ? catSource.id : null,
-      sourceModelId: catSource.kind === 'model' ? catSource.id : null,
-    }),
-    onSuccess: (c) => { setNewCat(''); setCatSource({ kind: 'none', id: null }); setSelectedCat(c.id); invalidate(); },
-    onError,
-  });
-  const fillCat = useMutation({
-    mutationFn: (id: string) => settingsService.fillQuickCategory(id, { limit: 24 }),
-    onSuccess: (r) => { toast.success(t('upgrade.filledTiles', { n: r.added })); invalidate(); },
-    onError,
-  });
-  const delCat = useMutation({ mutationFn: (id: string) => settingsService.deleteQuickCategory(id), onSuccess: () => { setSelectedCat(null); toast.success(t('common.deleted')); invalidate(); }, onError });
-  const addProd = useMutation({ mutationFn: (productId: string) => settingsService.saveQuickProduct({ productId, categoryId: activeCat?.id ?? null, branchId, order: items.length }), onSuccess: invalidate, onError });
-  const delProd = useMutation({ mutationFn: (id: string) => settingsService.deleteQuickProduct(id), onSuccess: invalidate, onError });
-  const reorder = useMutation({ mutationFn: (ids: string[]) => settingsService.reorderQuickProducts(ids), onSuccess: invalidate, onError });
-
-  const onDrop = (targetId: string) => {
-    if (!dragId || dragId === targetId) return;
-    const ids = items.map((i) => i.id);
-    const from = ids.indexOf(dragId);
-    const to = ids.indexOf(targetId);
-    if (from < 0 || to < 0) return;
-    ids.splice(from, 1);
-    ids.splice(to, 0, dragId);
-    setDragId(null);
-    reorder.mutate(ids);
-  };
-
-  const inGrid = new Set(items.map((i) => i.productId));
-  const term = search.trim().toLowerCase();
-  // With no search term, propose what actually sells instead of an empty list.
-  const bestSellers = useQuery({
-    queryKey: ['quick', 'bestSellers', branchId],
-    queryFn: () => reportService.salesReport({ from: new Date(Date.now() - 90 * 86400000).toISOString(), to: new Date().toISOString(), branchId: branchId ?? undefined, groupBy: 'product' }),
-    enabled: !term,
-    staleTime: 5 * 60_000,
-  });
-  const topIds = React.useMemo(() => (bestSellers.data?.rows ?? []).map((r) => r.key).filter((id): id is string => Boolean(id)), [bestSellers.data]);
-  const candidates = term
-    ? allProducts.filter((p) => p.isActive && !inGrid.has(p.id) && (tx(p.name).toLowerCase().includes(term) || p.sku.toLowerCase().includes(term))).slice(0, 20)
-    : topIds.map((id) => allProducts.find((p) => p.id === id)).filter((p): p is NonNullable<typeof p> => Boolean(p) && p!.isActive && !inGrid.has(p!.id)).slice(0, 15);
-
-  return (
-    <div className="space-y-3">
-      <Section title={t('upgrade.quickGrid')}>
-        <FormField label={t('upgrade.scope')}>
-          <Select value={scope} onValueChange={(v) => { setScope(v); setSelectedCat(null); }}>
-            <SelectTrigger className="max-w-xs"><SelectValue /></SelectTrigger>
-            <SelectContent><SelectItem value="global">{t('upgrade.global')}</SelectItem>{scopeBranches.map((b) => <SelectItem key={b.value} value={b.value}>{b.label}</SelectItem>)}</SelectContent>
-          </Select>
-        </FormField>
-        <div className="mt-3">
-          <div className="mb-2 text-xs font-semibold">{t('upgrade.quickCategories')}</div>
-          <div className="flex flex-wrap items-center gap-1.5">
-            {categories.map((c) => (
-              <span key={c.id} className={cn('inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs', activeCat?.id === c.id ? 'border-primary bg-primary/10 text-primary' : 'bg-muted')} style={c.color ? { borderColor: c.color } : undefined}>
-                <button type="button" onClick={() => setSelectedCat(c.id)}>{tx(c.name)}</button>
-                {canEdit ? <button type="button" aria-label={t('common.delete')} className="text-muted-foreground hover:text-destructive" onClick={() => delCat.mutate(c.id)}><X className="size-3" /></button> : null}
-              </span>
-            ))}
-            {categories.length === 0 && !categoriesQ.isLoading ? <span className="text-xs text-muted-foreground">{t('common.noData')}</span> : null}
-          </div>
-          {canEdit ? <form className="mt-2 space-y-2" onSubmit={(e) => { e.preventDefault(); if (newCat.trim()) addCat.mutate(newCat.trim()); }}>
-            <div className="flex max-w-sm gap-2">
-              <Input value={newCat} onChange={(e) => setNewCat(e.target.value)} placeholder={t('common.nameAr')} />
-              <Button type="submit" size="sm" variant="outline" loading={addCat.isPending} disabled={!newCat.trim()}><Plus /> {t('upgrade.addCategory')}</Button>
-            </div>
-            <div className="flex flex-wrap items-end gap-2">
-              <FormField label={t('upgrade.groupSource')} hint={t('upgrade.groupSourceHint')}>
-                <Select value={catSource.kind} onValueChange={(v) => setCatSource({ kind: v as typeof catSource.kind, id: null })}>
-                  <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">{t('upgrade.sourceNone')}</SelectItem>
-                    <SelectItem value="category">{t('common.category')}</SelectItem>
-                    <SelectItem value="model">{t('upgrade.sourceModel')}</SelectItem>
-                  </SelectContent>
-                </Select>
-              </FormField>
-              {catSource.kind !== 'none' ? (
-                <FormField label={catSource.kind === 'category' ? t('common.category') : t('upgrade.sourceModel')}>
-                  <Combobox
-                    options={catSource.kind === 'category' ? options.categories : options.models}
-                    value={catSource.id ?? ''}
-                    onChange={(id) => setCatSource((s) => ({ ...s, id }))}
-                    placeholder={t('common.select')}
-                    className="w-64"
-                  />
-                </FormField>
-              ) : null}
-            </div>
-          </form> : null}
-        </div>
-      </Section>
-      <div className="grid gap-3 lg:grid-cols-2">
-        <Section
-          title={activeCat ? tx(activeCat.name) : t('common.products')}
-          description={canEdit ? t('upgrade.dragToReorder') : undefined}
-          actions={canEdit && activeCat && (activeCat.sourceCategoryId || activeCat.sourceModelId)
-            ? <Button size="sm" variant="outline" loading={fillCat.isPending} onClick={() => fillCat.mutate(activeCat.id)}><Sparkles /> {t('upgrade.fillFromSource')}</Button>
-            : undefined}
-        >
-          {productsQ.isLoading ? <PageLoading /> : items.length === 0 ? <div className="py-6 text-center text-sm text-muted-foreground">{t('common.noData')}</div> : (
-            <ul className="space-y-1">
-              {items.map((qp) => (
-                <li key={qp.id} draggable={canEdit} onDragStart={() => setDragId(qp.id)} onDragOver={(e) => e.preventDefault()} onDrop={() => onDrop(qp.id)} onDragEnd={() => setDragId(null)} className={cn('flex items-center gap-2 rounded-md border px-2 py-1.5 text-sm', dragId === qp.id && 'opacity-50', canEdit && 'cursor-grab')} style={qp.color ? { borderInlineStartColor: qp.color, borderInlineStartWidth: 3 } : undefined}>
-                  {canEdit ? <GripVertical className="size-4 shrink-0 text-muted-foreground" /> : null}
-                  <span className="min-w-0 flex-1 truncate">{qp.label ? tx(qp.label) : productName(qp.productId)}</span>
-                  {canEdit ? <Button variant="ghost" size="icon-xs" aria-label={t('common.delete')} className="text-destructive" onClick={() => delProd.mutate(qp.id)}><Trash2 /></Button> : null}
-                </li>
-              ))}
-            </ul>
-          )}
-        </Section>
-        {canEdit ? <Section title={t('upgrade.addProducts')}>
-          <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t('common.searchPlaceholder')} />
-          {!term ? <div className="mt-2 text-xs font-medium text-muted-foreground">{t('upgrade.bestSellers')}</div> : null}
-          <ul className="mt-2 max-h-80 space-y-1 overflow-auto">
-            {candidates.map((p, i) => (
-              <li key={p.id} className="flex items-center justify-between gap-2 rounded-md border px-2 py-1.5 text-sm">
-                <span className="min-w-0 truncate">{!term ? <span className="me-1 text-xs text-muted-foreground num">{i + 1}.</span> : null}{tx(p.name)} <span className="text-xs text-muted-foreground" dir="ltr">({p.sku})</span></span>
-                <Button variant="outline" size="xs" onClick={() => addProd.mutate(p.id)} disabled={addProd.isPending}><Plus /> {t('common.add')}</Button>
-              </li>
-            ))}
-            {candidates.length === 0 ? <li className="py-4 text-center text-xs text-muted-foreground">{term ? t('common.noResults') : t('common.noData')}</li> : null}
-          </ul>
-        </Section> : null}
-      </div>
-    </div>
-  );
-}
-
 // ---------- Terminals ----------
 function TerminalsTab() {
   const { t, locale } = useT();
@@ -391,7 +228,7 @@ function TerminalsTab() {
 
 // ---------- Form shapes for new settings tabs ----------
 type PricingForm = Record<`${PriceTier}Ar` | `${PriceTier}En`, string>;
-interface AlertsForm { enabled: Record<AlertType, boolean>; countVarianceThresholdPct: number; largeReturnAmount: number; maxReturnsPerCashierPerDay: number; registerVarianceAmount: number; unusualDiscountPercent: number; maxVoidsPerCashierPerDay: number; whatsappManagerPhone: string; whatsappOnCritical: boolean }
+interface AlertsForm { enabled: Record<AlertType, boolean>; countVarianceThresholdPct: number; largeReturnAmount: number; maxReturnsPerCashierPerDay: number; registerVarianceAmount: number; unusualDiscountAmount: number; maxVoidsPerCashierPerDay: number; whatsappManagerPhone: string; whatsappOnCritical: boolean }
 interface ReportsForm { annualCarryingRatePct: number; deadStockDefaultIdleDays: number }
 
 export default function SettingsPage() {
@@ -414,7 +251,7 @@ export default function SettingsPage() {
   const tabs: [string, React.ComponentType<{ className?: string }>, string][] = [
     ['company', Building2, t('settings.company')], ['branch', Store, t('settings.branch')], ['currency', Coins, t('settings.currency')], ['invoice', FileText, t('settings.invoice')],
     ['receipt', Receipt, t('settings.receipt')], ['printing', Printer, t('upgrade.printing')], ['barcode', BarcodeIcon, t('settings.barcode')], ['pos', Monitor, t('settings.pos')],
-    ['quickGrid', LayoutGrid, t('upgrade.quickGrid')], ['pricing', Tags, t('upgrade.pricing')], ['alerts', BellRing, t('upgrade.alerts')], ['reports', BarChart3, t('upgrade.reports')],
+    ['pricing', Tags, t('upgrade.pricing')], ['alerts', BellRing, t('upgrade.alerts')], ['reports', BarChart3, t('upgrade.reports')],
     ['terminals', MonitorSmartphone, t('upgrade.terminals')], ['notifications', Bell, t('settings.notifications')], ['appearance', Palette, `${t('settings.language')} / ${t('settings.theme')}`],
     ['permissions', ShieldCheck, t('settings.permissions')], ['system', Settings2, t('settings.system')],
   ];
@@ -455,29 +292,26 @@ export default function SettingsPage() {
           </TabsContent>
           <TabsContent value="branch" className="mt-0"><Section title={t('settings.branch')} description={t('branches.subtitle')}><div className="space-y-2">{branches.map((b) => <Link key={b.id} to={`/branches/${b.id}`} className="flex items-center justify-between rounded-md border px-3 py-2 text-sm hover:bg-accent"><span>{tx(b.name)} <span className="text-xs text-muted-foreground">({b.code})</span></span><span className="text-xs text-muted-foreground">{b.posTerminals} POS · {warehouses.filter((w) => w.branchId === b.id).length} {t('nav.warehouses')}</span></Link>)}</div><Button variant="outline" size="sm" className="mt-3" asChild><Link to="/branches">{t('nav.branches')}</Link></Button></Section></TabsContent>
           <TabsContent value="currency" className="mt-0"><Section title={t('settings.currency')}><SectionForm defaults={{ code: s.currency.code, symbolAr: s.currency.symbol.ar, symbolEn: s.currency.symbol.en ?? '', decimals: s.currency.decimals, symbolPosition: s.currency.symbolPosition }} disabled={!canEdit} onSave={(v) => save('currency', { code: v.code, symbol: { ar: v.symbolAr, en: v.symbolEn || undefined }, decimals: Number(v.decimals), symbolPosition: v.symbolPosition })}>{(f) => <FormGrid><TextField control={f.control} name="code" label={t('settings.currencyCode')} dir="ltr" /><TextField control={f.control} name="decimals" type="number" label={t('settings.decimals')} dir="ltr" /><TextField control={f.control} name="symbolAr" label={`${t('settings.currencySymbol')} (AR)`} /><TextField control={f.control} name="symbolEn" label={`${t('settings.currencySymbol')} (EN)`} dir="ltr" /><SelectField control={f.control} name="symbolPosition" label={t('settings.symbolPosition')} options={[{ value: 'before', label: t('settings.before') }, { value: 'after', label: t('settings.after') }]} /></FormGrid>}</SectionForm></Section></TabsContent>
-          <TabsContent value="invoice" className="mt-0"><Section title={t('settings.invoice')}><SectionForm defaults={{ prefix: s.invoice.prefix, nextNumber: s.invoice.nextNumber, footerAr: s.invoice.footerText.ar, footerEn: s.invoice.footerText.en ?? '', showLogo: s.invoice.showLogo, showTax: s.invoice.showTax, taxRate: s.invoice.taxRate, allowNegativeStock: s.invoice.allowNegativeStock }} disabled={!canEdit} onSave={(v) => save('invoice', { prefix: v.prefix, nextNumber: Number(v.nextNumber), footerText: { ar: v.footerAr, en: v.footerEn || undefined }, showLogo: v.showLogo, showTax: v.showTax, taxRate: Number(v.taxRate), allowNegativeStock: v.allowNegativeStock })}>{(f) => <><FormGrid><TextField control={f.control} name="prefix" label={t('settings.invoicePrefix')} dir="ltr" /><TextField control={f.control} name="nextNumber" type="number" label={t('settings.nextNumber')} dir="ltr" /><TextField control={f.control} name="footerAr" label={`${t('settings.footerText')} (AR)`} /><TextField control={f.control} name="footerEn" label={`${t('settings.footerText')} (EN)`} dir="ltr" /><TextField control={f.control} name="taxRate" type="number" label={`${t('settings.taxRate')} %`} dir="ltr" /></FormGrid><FormGrid cols={3}><SwitchField control={f.control} name="showLogo" label={t('settings.showLogo')} /><SwitchField control={f.control} name="showTax" label={t('settings.showTax')} /><SwitchField control={f.control} name="allowNegativeStock" label={t('settings.allowNegativeStock')} /></FormGrid></>}</SectionForm></Section></TabsContent>
-          <TabsContent value="receipt" className="mt-0"><div className="grid gap-3 lg:grid-cols-[1fr_320px]"><Section title={t('settings.receipt')}><SectionForm defaults={{ paperWidth: String(s.receipt.paperWidth), showBarcode: s.receipt.showBarcode, showCashier: s.receipt.showCashier, showCustomerBalance: s.receipt.showCustomerBalance, copies: s.receipt.copies, headerLines: s.receipt.headerLines.join('\n'), subtitleAr: s.receipt.subtitle.ar, subtitleEn: s.receipt.subtitle.en ?? '', taglineAr: s.receipt.tagline.ar, taglineEn: s.receipt.tagline.en ?? '', sloganAr: s.receipt.slogan.ar, sloganEn: s.receipt.slogan.en ?? '', warrantyAr: s.receipt.warrantyNotes.map((x) => x.ar).join('\n'), warrantyEn: s.receipt.warrantyNotes.map((x) => x.en ?? '').join('\n'), brandLogos: s.receipt.brandLogos.map((b) => `${b.name} ${b.color}`).join('\n') }} disabled={!canEdit} onSave={(v) => save('receipt', { paperWidth: Number(v.paperWidth) as 58 | 80, showBarcode: v.showBarcode, showCashier: v.showCashier, showCustomerBalance: v.showCustomerBalance, copies: Number(v.copies), headerLines: lines(v.headerLines), subtitle: { ar: v.subtitleAr, en: v.subtitleEn || undefined }, tagline: { ar: v.taglineAr, en: v.taglineEn || undefined }, slogan: { ar: v.sloganAr, en: v.sloganEn || undefined }, warrantyNotes: zipNotes(v.warrantyAr, v.warrantyEn), brandLogos: parseBrandLogos(v.brandLogos) })}>{(f) => <><FormGrid><SelectField control={f.control} name="paperWidth" label={t('settings.paperWidth')} options={[{ value: '58', label: '58 mm' }, { value: '80', label: '80 mm' }]} /><TextField control={f.control} name="copies" type="number" label={t('settings.copies')} dir="ltr" /></FormGrid><FormField label={t('settings.headerLines')}><textarea {...f.register('headerLines')} rows={3} className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm" /></FormField><FormGrid cols={3}><SwitchField control={f.control} name="showBarcode" label={t('settings.showBarcode')} /><SwitchField control={f.control} name="showCashier" label={t('settings.showCashier')} /><SwitchField control={f.control} name="showCustomerBalance" label={t('settings.showCustomerBalance')} /></FormGrid><div className="border-t pt-3"><h4 className="mb-2 text-xs font-semibold text-muted-foreground">{t('settings.invoiceBranding')}</h4><FormGrid><TextField control={f.control} name="subtitleAr" label={`${t('settings.storeSubtitle')} (AR)`} /><TextField control={f.control} name="subtitleEn" label={`${t('settings.storeSubtitle')} (EN)`} dir="ltr" /><TextField control={f.control} name="taglineAr" label={`${t('settings.storeTagline')} (AR)`} /><TextField control={f.control} name="taglineEn" label={`${t('settings.storeTagline')} (EN)`} dir="ltr" /><TextField control={f.control} name="sloganAr" label={`${t('settings.storeSlogan')} (AR)`} /><TextField control={f.control} name="sloganEn" label={`${t('settings.storeSlogan')} (EN)`} dir="ltr" /></FormGrid><FormGrid><FormField label={`${t('settings.warrantyNotes')} (AR)`} hint={t('settings.onePerLine')}><textarea {...f.register('warrantyAr')} rows={3} className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm" /></FormField><FormField label={`${t('settings.warrantyNotes')} (EN)`} hint={t('settings.onePerLine')}><textarea {...f.register('warrantyEn')} rows={3} dir="ltr" className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm" /></FormField></FormGrid><FormField label={t('settings.brandLogos')} hint={t('settings.brandLogosHint')}><textarea {...f.register('brandLogos')} rows={3} dir="ltr" className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm" /></FormField></div></>}</SectionForm></Section><Section title={t('settings.receiptPreview')}><div className="overflow-auto rounded border bg-white text-black">{sampleSale ? <ReceiptPreview sale={sampleSale} /> : <div className="p-3 text-xs text-muted-foreground">{t('common.noData')}</div>}</div></Section></div></TabsContent>
+          <TabsContent value="invoice" className="mt-0"><Section title={t('settings.invoice')}><SectionForm defaults={{ prefix: s.invoice.prefix, nextNumber: s.invoice.nextNumber, footerAr: s.invoice.footerText.ar, footerEn: s.invoice.footerText.en ?? '', showLogo: s.invoice.showLogo }} disabled={!canEdit} onSave={(v) => save('invoice', { prefix: v.prefix, nextNumber: Number(v.nextNumber), footerText: { ar: v.footerAr, en: v.footerEn || undefined }, showLogo: v.showLogo, showTax: false, taxEnabled: false, taxRate: 0, allowNegativeStock: false })}>{(f) => <><FormGrid><TextField control={f.control} name="prefix" label={t('settings.invoicePrefix')} dir="ltr" /><TextField control={f.control} name="nextNumber" type="number" label={t('settings.nextNumber')} dir="ltr" /><TextField control={f.control} name="footerAr" label={`${t('settings.footerText')} (AR)`} /><TextField control={f.control} name="footerEn" label={`${t('settings.footerText')} (EN)`} dir="ltr" /></FormGrid><FormGrid cols={3}><SwitchField control={f.control} name="showLogo" label={t('settings.showLogo')} /></FormGrid></>}</SectionForm></Section></TabsContent>
+          <TabsContent value="receipt" className="mt-0"><div className="grid gap-3 lg:grid-cols-[1fr_320px]"><Section title={t('settings.receipt')}><SectionForm defaults={{ paperWidth: String(s.receipt.paperWidth), showBarcode: s.receipt.showBarcode, showCashier: s.receipt.showCashier, showCustomerBalance: s.receipt.showCustomerBalance, copies: s.receipt.copies, headerLines: s.receipt.headerLines.join('\n'), subtitleAr: s.receipt.subtitle.ar, subtitleEn: s.receipt.subtitle.en ?? '', taglineAr: s.receipt.tagline.ar, taglineEn: s.receipt.tagline.en ?? '', sloganAr: s.receipt.slogan.ar, sloganEn: s.receipt.slogan.en ?? '', warrantyAr: s.receipt.warrantyNotes.map((x) => x.ar).join('\n'), warrantyEn: s.receipt.warrantyNotes.map((x) => x.en ?? '').join('\n'), brandLogos: s.receipt.brandLogos.map((b) => `${b.name} ${b.color}`).join('\n') }} disabled={!canEdit} onSave={(v) => save('receipt', { paperWidth: 80, showBarcode: v.showBarcode, showCashier: v.showCashier, showCustomerBalance: v.showCustomerBalance, copies: Number(v.copies), headerLines: lines(v.headerLines), subtitle: { ar: v.subtitleAr, en: v.subtitleEn || undefined }, tagline: { ar: v.taglineAr, en: v.taglineEn || undefined }, slogan: { ar: v.sloganAr, en: v.sloganEn || undefined }, warrantyNotes: zipNotes(v.warrantyAr, v.warrantyEn), brandLogos: parseBrandLogos(v.brandLogos) })}>{(f) => <><FormGrid><SelectField control={f.control} name="paperWidth" label={t('settings.paperWidth')} options={[{ value: '80', label: '80 mm' }]} /><TextField control={f.control} name="copies" type="number" label={t('settings.copies')} dir="ltr" /></FormGrid><FormField label={t('settings.headerLines')}><textarea {...f.register('headerLines')} rows={3} className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm" /></FormField><FormGrid cols={3}><SwitchField control={f.control} name="showBarcode" label={t('settings.showBarcode')} /><SwitchField control={f.control} name="showCashier" label={t('settings.showCashier')} /><SwitchField control={f.control} name="showCustomerBalance" label={t('settings.showCustomerBalance')} /></FormGrid><div className="border-t pt-3"><h4 className="mb-2 text-xs font-semibold text-muted-foreground">{t('settings.invoiceBranding')}</h4><FormGrid><TextField control={f.control} name="subtitleAr" label={`${t('settings.storeSubtitle')} (AR)`} /><TextField control={f.control} name="subtitleEn" label={`${t('settings.storeSubtitle')} (EN)`} dir="ltr" /><TextField control={f.control} name="taglineAr" label={`${t('settings.storeTagline')} (AR)`} /><TextField control={f.control} name="taglineEn" label={`${t('settings.storeTagline')} (EN)`} dir="ltr" /><TextField control={f.control} name="sloganAr" label={`${t('settings.storeSlogan')} (AR)`} /><TextField control={f.control} name="sloganEn" label={`${t('settings.storeSlogan')} (EN)`} dir="ltr" /></FormGrid><FormGrid><FormField label={`${t('settings.warrantyNotes')} (AR)`} hint={t('settings.onePerLine')}><textarea {...f.register('warrantyAr')} rows={3} className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm" /></FormField><FormField label={`${t('settings.warrantyNotes')} (EN)`} hint={t('settings.onePerLine')}><textarea {...f.register('warrantyEn')} rows={3} dir="ltr" className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm" /></FormField></FormGrid><FormField label={t('settings.brandLogos')} hint={t('settings.brandLogosHint')}><textarea {...f.register('brandLogos')} rows={3} dir="ltr" className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm" /></FormField></div></>}</SectionForm></Section><Section title={t('settings.receiptPreview')}><div className="overflow-auto rounded border bg-white text-black">{sampleSale ? <ReceiptPreview sale={sampleSale} /> : <div className="p-3 text-xs text-muted-foreground">{t('common.noData')}</div>}</div></Section></div></TabsContent>
           <TabsContent value="printing" className="mt-0"><PrintingTab sampleSale={sampleSale} canEdit={canEdit} /></TabsContent>
           <TabsContent value="barcode" className="mt-0"><Section title={t('settings.barcode')}><SectionForm defaults={{ ...s.barcode }} disabled={!canEdit} onSave={(v) => save('barcode', { internalPrefix: v.internalPrefix, length: Number(v.length), labelWidth: Number(v.labelWidth), labelHeight: Number(v.labelHeight), showPrice: v.showPrice, showName: v.showName })}>{(f) => <><FormGrid><TextField control={f.control} name="internalPrefix" label={t('settings.internalPrefix')} dir="ltr" /><TextField control={f.control} name="length" type="number" label={t('settings.barcodeLength')} dir="ltr" /><TextField control={f.control} name="labelWidth" type="number" label={t('settings.labelWidth')} dir="ltr" /><TextField control={f.control} name="labelHeight" type="number" label={t('settings.labelHeight')} dir="ltr" /></FormGrid><FormGrid><SwitchField control={f.control} name="showPrice" label={t('settings.showPrice')} /><SwitchField control={f.control} name="showName" label={t('settings.showName')} /></FormGrid></>}</SectionForm></Section></TabsContent>
           <TabsContent value="pos" className="mt-0">
             <Section title={t('settings.pos')}>
               <SectionForm
-                defaults={{ defaultPaymentMethod: s.pos.defaultPaymentMethod, autoPrint: s.pos.autoPrint, requireCustomerForCredit: s.pos.requireCustomerForCredit, maxDiscountPercent: s.pos.maxDiscountPercent, soundOnScan: s.pos.soundOnScan, openDrawerOnSale: s.pos.openDrawerOnSale, defaultPriceTier: s.pos.defaultPriceTier, gridColumns: s.pos.gridColumns, gridPageSize: s.pos.gridPageSize, showTierChooserOnScan: s.pos.showTierChooserOnScan, idleLockMinutes: s.pos.idleLockMinutes }}
+                defaults={{ defaultPaymentMethod: s.pos.defaultPaymentMethod, autoPrint: s.pos.autoPrint, maxDiscountAmount: s.pos.maxDiscountAmount, soundOnScan: s.pos.soundOnScan, openDrawerOnSale: s.pos.openDrawerOnSale, defaultPriceTier: s.pos.defaultPriceTier, showTierChooserOnScan: s.pos.showTierChooserOnScan, idleLockMinutes: s.pos.idleLockMinutes }}
                 disabled={!canEdit}
-                onSave={(v) => save('pos', { ...s.pos, ...v, maxDiscountPercent: Number(v.maxDiscountPercent), gridColumns: Math.min(8, Math.max(4, Number(v.gridColumns) || 4)), gridPageSize: Math.max(1, Number(v.gridPageSize) || 1), idleLockMinutes: Math.min(240, Math.max(0, Number(v.idleLockMinutes) || 0)) })}
+                onSave={(v) => save('pos', { ...s.pos, ...v, idleLockMinutes: Math.min(240, Math.max(0, Number(v.idleLockMinutes) || 0)) })}
               >
                 {(f) => <>
                   <FormGrid>
                     <SelectField control={f.control} name="defaultPaymentMethod" label={t('settings.defaultPayment')} options={[{ value: 'cash', label: t('sales.methods.cash') }, { value: 'card', label: t('sales.methods.card') }, { value: 'bank_transfer', label: t('sales.methods.bank_transfer') }]} />
-                    <TextField control={f.control} name="maxDiscountPercent" type="number" label={t('settings.maxDiscount')} dir="ltr" />
                     <SelectField control={f.control} name="defaultPriceTier" label={t('upgrade.defaultTier')} options={PRICE_TIERS.map((tier) => ({ value: tier, label: tx(s.pricing.tierLabels[tier]) || t(TIER_LABEL_KEY[tier]) }))} />
-                    <TextField control={f.control} name="gridColumns" type="number" label={`${t('upgrade.gridColumns')} (4–8)`} dir="ltr" />
-                    <TextField control={f.control} name="gridPageSize" type="number" label={t('upgrade.gridPageSize')} dir="ltr" />
+                    <TextField control={f.control} name="maxDiscountAmount" type="number" label={t('settings.maxDiscount')} dir="ltr" step="0.01" />
                     <TextField control={f.control} name="idleLockMinutes" type="number" label={t('settings.idleLock')} dir="ltr" />
                   </FormGrid>
                   <FormGrid>
                     <SwitchField control={f.control} name="autoPrint" label={t('settings.autoPrint')} />
-                    <SwitchField control={f.control} name="requireCustomerForCredit" label={t('settings.requireCustomerCredit')} />
                     <SwitchField control={f.control} name="soundOnScan" label={t('settings.soundOnScan')} />
                     <SwitchField control={f.control} name="openDrawerOnSale" label={t('settings.openDrawer')} />
                     <SwitchField control={f.control} name="showTierChooserOnScan" label={t('upgrade.showTierChooserOnScan')} />
@@ -486,7 +320,6 @@ export default function SettingsPage() {
               </SectionForm>
             </Section>
           </TabsContent>
-          <TabsContent value="quickGrid" className="mt-0"><QuickGridTab canEdit={canEdit} /></TabsContent>
           <TabsContent value="pricing" className="mt-0">
             <Section title={t('upgrade.tierLabels')}>
               <SectionForm<PricingForm>
@@ -501,9 +334,9 @@ export default function SettingsPage() {
           <TabsContent value="alerts" className="mt-0">
             <Section title={t('upgrade.alerts')}>
               <SectionForm<AlertsForm>
-                defaults={{ enabled: s.alerts.enabled, countVarianceThresholdPct: s.alerts.countVarianceThresholdPct, largeReturnAmount: s.alerts.largeReturnAmount, maxReturnsPerCashierPerDay: s.alerts.maxReturnsPerCashierPerDay, registerVarianceAmount: s.alerts.registerVarianceAmount, unusualDiscountPercent: s.alerts.unusualDiscountPercent, maxVoidsPerCashierPerDay: s.alerts.maxVoidsPerCashierPerDay, whatsappManagerPhone: s.alerts.whatsappManagerPhone, whatsappOnCritical: s.alerts.whatsappOnCritical }}
+                defaults={{ enabled: s.alerts.enabled, countVarianceThresholdPct: s.alerts.countVarianceThresholdPct, largeReturnAmount: s.alerts.largeReturnAmount, maxReturnsPerCashierPerDay: s.alerts.maxReturnsPerCashierPerDay, registerVarianceAmount: s.alerts.registerVarianceAmount, unusualDiscountAmount: s.alerts.unusualDiscountAmount, maxVoidsPerCashierPerDay: s.alerts.maxVoidsPerCashierPerDay, whatsappManagerPhone: s.alerts.whatsappManagerPhone, whatsappOnCritical: s.alerts.whatsappOnCritical }}
                 disabled={!canEdit}
-                onSave={(v) => save('alerts', { ...s.alerts, ...v, countVarianceThresholdPct: Number(v.countVarianceThresholdPct), largeReturnAmount: Number(v.largeReturnAmount), maxReturnsPerCashierPerDay: Number(v.maxReturnsPerCashierPerDay), registerVarianceAmount: Number(v.registerVarianceAmount), unusualDiscountPercent: Number(v.unusualDiscountPercent), maxVoidsPerCashierPerDay: Number(v.maxVoidsPerCashierPerDay) })}
+                onSave={(v) => save('alerts', { ...s.alerts, ...v, countVarianceThresholdPct: Number(v.countVarianceThresholdPct), largeReturnAmount: Number(v.largeReturnAmount), maxReturnsPerCashierPerDay: Number(v.maxReturnsPerCashierPerDay), registerVarianceAmount: Number(v.registerVarianceAmount), unusualDiscountAmount: Number(v.unusualDiscountAmount), maxVoidsPerCashierPerDay: Number(v.maxVoidsPerCashierPerDay) })}
               >
                 {(f) => <>
                   <div className="mb-1 text-xs font-semibold">{t('upgrade.enabledTypes')}</div>
@@ -514,7 +347,7 @@ export default function SettingsPage() {
                     <TextField control={f.control} name="largeReturnAmount" type="number" label={t('upgrade.largeReturnAmount')} dir="ltr" />
                     <TextField control={f.control} name="maxReturnsPerCashierPerDay" type="number" label={t('upgrade.maxReturnsPerCashierPerDay')} dir="ltr" />
                     <TextField control={f.control} name="registerVarianceAmount" type="number" label={t('upgrade.registerVarianceAmount')} dir="ltr" />
-                    <TextField control={f.control} name="unusualDiscountPercent" type="number" label={t('upgrade.unusualDiscountPercent')} dir="ltr" />
+                    <TextField control={f.control} name="unusualDiscountAmount" type="number" label={t('upgrade.unusualDiscountAmount')} dir="ltr" />
                     <TextField control={f.control} name="maxVoidsPerCashierPerDay" type="number" label={t('upgrade.maxVoidsPerCashierPerDay')} dir="ltr" />
                     <TextField control={f.control} name="whatsappManagerPhone" label={t('upgrade.whatsappManagerPhone')} dir="ltr" />
                     <SwitchField control={f.control} name="whatsappOnCritical" label={t('upgrade.whatsappOnCriticalCloud')} disabled={whatsappMode.data?.mode !== 'cloud' && !f.watch('whatsappOnCritical')} />

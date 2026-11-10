@@ -19,7 +19,8 @@ import { useT } from '@/i18n';
 import { matchSearch } from '@/lib/utils';
 import { defaultLabelTemplate } from '@moto/shared';
 import type { LabelJob, LabelTemplate } from '@/types';
-import { LabelRenderer, labelPageStyle } from './LabelRenderer';
+import { LabelRenderer } from './LabelRenderer';
+import { printBrowserLabels } from './labelPrint';
 
 export default function BarcodesPage() {
   const { t, tx } = useT();
@@ -28,7 +29,7 @@ export default function BarcodesPage() {
   const canEdit = useAuthStore((s) => s.hasPermission('settings.edit'));
   const branchId = useAuthStore((s) => s.session!.user.branchId);
   const { options } = useLookups();
-  const { settings } = useSettings();
+  const { settings, isLoading: settingsLoading } = useSettings();
   const products = useQuery({ queryKey: ['products', 'all'], queryFn: () => productService.all() });
   const levels = useQuery({ queryKey: ['inventory', 'levels', branchId], queryFn: () => inventoryService.levels({ branchId }) });
   const templatesQ = useQuery({ queryKey: ['labelTemplates', branchId], queryFn: () => settingsService.labelTemplates(branchId) });
@@ -38,6 +39,8 @@ export default function BarcodesPage() {
   const [queue, setQueue] = React.useState<LabelJob[]>(() => ((location.state as { ids?: string[] } | null)?.ids ?? []).map((id) => ({ productId: id, quantity: 1 })));
   const [search, setSearch] = React.useState('');
   const [previewId, setPreviewId] = React.useState<string | null>(null);
+  const printRef = React.useRef<HTMLDivElement>(null);
+  const [printing, setPrinting] = React.useState(false);
 
   const list = React.useMemo(() => (products.data ?? []).filter((p) => matchSearch([p.name.ar, p.name.en, p.sku, p.internalBarcode, p.legacyBarcode, p.partNumber], search)), [products.data, search]);
   // Shelf/bin only makes sense per branch, so labels print the location of the user's own branch.
@@ -59,9 +62,16 @@ export default function BarcodesPage() {
     qc.invalidateQueries({ queryKey: ['products'] });
   };
 
-  const print = () => {
-    toast.success(t('barcodes.printSent'), { description: `${totalLabels} ${t('barcodes.copies')}` });
-    setTimeout(() => window.print(), 200);
+  const print = async () => {
+    if (printing) return;
+    setPrinting(true);
+    try {
+      await printBrowserLabels(printRef.current, template);
+    } catch {
+      toast.error(t('barcodes.printFailed'));
+    } finally {
+      setPrinting(false);
+    }
   };
 
   return (
@@ -134,7 +144,7 @@ export default function BarcodesPage() {
                   ) : null; })}
                 </ul>
               )}
-              <div className="mt-3 flex items-center justify-between border-t pt-3"><span className="text-sm">{t('barcodes.labelsCount')}: <b className="num">{totalLabels}</b></span><Button disabled={!queue.length} onClick={print}><Printer /> {t('barcodes.printNow')}</Button></div>
+              <div className="mt-3 flex items-center justify-between border-t pt-3"><span className="text-sm">{t('barcodes.labelsCount')}: <b className="num">{totalLabels}</b></span><Button disabled={!queue.some((job) => products.data?.some((product) => product.id === job.productId)) || settingsLoading || templatesQ.isPending} loading={printing} onClick={() => void print()}><Printer /> {t('barcodes.printNow')}</Button></div>
             </Section>
             <Section title={t('barcodes.labelPreview')} className="lg:col-span-2" description={`${t('barcodes.labelSize')}: ${template.widthMm}×${template.heightMm} mm · ${template.name}`}>
               {queue.length === 0 ? <EmptyState title={t('barcodes.queueEmpty')} /> : (
@@ -143,16 +153,15 @@ export default function BarcodesPage() {
                     {queue.flatMap((j) => { const p = products.data?.find((x) => x.id === j.productId); return p ? Array.from({ length: Math.min(j.quantity, 60) }, (_, i) => <div key={`${j.productId}-${i}`} className="border border-dashed border-gray-400"><LabelRenderer template={template} product={p} settings={settings} scale={3} location={locationOf(p.id)} /></div>) : []; })}
                     {totalLabels > 60 ? <div className="w-full text-center text-xs text-muted-foreground">+{totalLabels - 60}…</div> : null}
                   </div>
-                  <div className="print-area hidden print:block">
-                    <style>{labelPageStyle(template)}</style>
-                    {queue.flatMap((j) => { const p = products.data?.find((x) => x.id === j.productId); return p ? Array.from({ length: j.quantity }, (_, i) => <div key={`${j.productId}-${i}`} className="label-page"><LabelRenderer template={template} product={p} settings={settings} location={locationOf(p.id)} /></div>) : []; })}
-                  </div>
                 </>
               )}
             </Section>
           </div>
         </TabsContent>
       </Tabs>
+      <div ref={printRef} className="hidden" aria-hidden="true">
+        {queue.flatMap((j) => { const p = products.data?.find((x) => x.id === j.productId); return p ? Array.from({ length: j.quantity }, (_, i) => <div key={`${j.productId}-${i}`} className="label-page"><LabelRenderer template={template} product={p} settings={settings} location={locationOf(p.id)} /></div>) : []; })}
+      </div>
     </div>
   );
 }

@@ -8,7 +8,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { FormGrid, SelectField, TextField, FormField } from '@/components/shared/form';
+import { FormGrid, SelectField, TextField, FormField, SwitchField } from '@/components/shared/form';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Barcode } from '@/components/shared/barcode';
@@ -17,6 +17,8 @@ import { useAuthStore, useCurrentUser } from '@/stores/authStore';
 import { useLookups } from '@/hooks/useLookups';
 import { useSettings } from '@/hooks/useSettings';
 import { useT } from '@/i18n';
+import { productCategoryIds } from '@moto/shared';
+import { Combobox } from '@/components/shared/pickers';
 import type { Product, Warehouse } from '@/types';
 
 const SHELF_SEP = '::';
@@ -27,7 +29,7 @@ export function ProductFormDialog({ open, onOpenChange, product, onSaved, defaul
   const { t, tx } = useT();
   const qc = useQueryClient();
   const canEditPrice = useAuthStore((s) => s.hasPermission('prices.edit'));
-  const { options, warehouses } = useLookups();
+  const { options, warehouses, categories = [] } = useLookups();
   const user = useCurrentUser();
   const { settings } = useSettings();
   const tierLabels = settings.pricing.tierLabels;
@@ -38,17 +40,19 @@ export function ProductFormDialog({ open, onOpenChange, product, onSaved, defaul
       sku: z.string().optional(),
       partNumber: z.string().optional(),
       brandId: z.string().min(1, t('validation.required')),
-      categoryId: z.string().min(1, t('validation.required')),
+      categoryIds: z.array(z.string().min(1)).min(1, t('validation.required')).max(100),
       supplierId: z.string().optional(),
     size: z.string().max(60).optional(),
     purchasePrice: z.coerce.number().min(0, t('validation.nonNegative')),
     retail1: z.coerce.number().positive(t('validation.positive')),
     retail2: z.coerce.number().min(0, t('validation.nonNegative')),
     wholesale: z.coerce.number().min(0, t('validation.nonNegative')),
+    maxDiscountAmount: z.coerce.number().min(0, t('validation.nonNegative')),
     minStock: z.coerce.number().int(t('validation.integer')).min(0),
     unit: z.enum(['piece', 'set', 'liter']),
       changeReason: z.string().optional(),
       legacyBarcode: z.string().max(40).optional(),
+      isQuickProduct: z.boolean(),
       warehouseId: z.string().optional(),
       shelf: z.string().max(20).optional(),
       bin: z.string().max(20).optional(),
@@ -64,22 +68,25 @@ export function ProductFormDialog({ open, onOpenChange, product, onSaved, defaul
     sku: p?.sku ?? '',
     partNumber: p?.partNumber ?? '',
     brandId: p?.brandId ?? '',
-    categoryId: p?.categoryId ?? defaultCategoryId ?? '',
+    categoryIds: p ? productCategoryIds(p) : defaultCategoryId ? [defaultCategoryId] : [],
     supplierId: p?.supplierId ?? '',
     size: p?.size ?? '',
-    purchasePrice: p?.purchasePrice ?? 0,
-    retail1: p?.prices.retail1 ?? 0,
-    retail2: p?.prices.retail2 ?? 0,
-    wholesale: p?.prices.wholesale ?? 0,
+    purchasePrice: (p?.purchasePrice ?? '') as F['purchasePrice'],
+    retail1: (p?.prices.retail1 ?? '') as F['retail1'],
+    retail2: (p?.prices.retail2 ?? '') as F['retail2'],
+    wholesale: (p?.prices.wholesale ?? '') as F['wholesale'],
+    maxDiscountAmount: (p?.maxDiscountAmount ?? '') as F['maxDiscountAmount'],
     minStock: p?.minStock ?? 10,
     unit: unitOf(p),
     changeReason: '',
     legacyBarcode: p?.legacyBarcode ?? '',
+    isQuickProduct: p?.isQuickProduct ?? true,
     warehouseId: '',
     shelf: '',
     bin: '',
   });
   const form = useForm<F>({ resolver: zodResolver(schema), defaultValues: defaults(product) });
+  const selectedCategories = form.watch('categoryIds');
   const initialPlacement = React.useRef<{ warehouseId: string; shelf: string; bin: string } | null>(null);
   React.useEffect(() => {
     if (open) {
@@ -160,7 +167,7 @@ export function ProductFormDialog({ open, onOpenChange, product, onSaved, defaul
     try {
       const cat = await productService.addCategory({ name: { ar: name } });
       await qc.invalidateQueries({ queryKey: ['categories'] });
-      form.setValue('categoryId', cat.id, { shouldValidate: true, shouldDirty: true });
+      form.setValue('categoryIds', [...new Set([...form.getValues('categoryIds'), cat.id])], { shouldValidate: true, shouldDirty: true });
       setNewCategory(null);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : t('common.error'));
@@ -171,7 +178,6 @@ export function ProductFormDialog({ open, onOpenChange, product, onSaved, defaul
 
   const retail = form.watch('retail1');
   const cost = form.watch('purchasePrice');
-  const margin = retail && cost ? ((retail - cost) / retail) * 100 : 0;
   const unitNames = { piece: { ar: 'قطعة', en: 'Piece' }, set: { ar: 'طقم', en: 'Set' }, liter: { ar: 'لتر', en: 'Liter' } };
 
   const placementOf = (v: F) => {
@@ -191,14 +197,17 @@ export function ProductFormDialog({ open, onOpenChange, product, onSaved, defaul
       sku: v.sku?.trim() || undefined,
       partNumber: v.partNumber?.trim() ?? '',
       brandId: v.brandId,
-      categoryId: v.categoryId,
+      categoryId: v.categoryIds[0]!,
+      categoryIds: v.categoryIds,
       supplierId: v.supplierId ?? '',
       size: v.size?.trim() || undefined,
       purchasePrice: v.purchasePrice,
       prices: { retail1: v.retail1, retail2: v.retail2 || v.retail1, wholesale: v.wholesale || v.retail1 },
+      maxDiscountAmount: v.maxDiscountAmount,
       minStock: v.minStock,
       unit: unitNames[v.unit],
       legacyBarcode: v.legacyBarcode?.trim() || undefined,
+      isQuickProduct: v.isQuickProduct,
       placement: placementOf(v),
     };
     try {
@@ -208,6 +217,8 @@ export function ProductFormDialog({ open, onOpenChange, product, onSaved, defaul
       toast.success(product ? t('common.updated') : t('common.created'));
       qc.invalidateQueries({ queryKey: ['products'] });
       qc.invalidateQueries({ queryKey: ['product', saved.id] });
+      qc.invalidateQueries({ queryKey: ['pos', 'catalog'] });
+      qc.invalidateQueries({ queryKey: ['categories', 'tree'] });
       if (payload.placement) qc.invalidateQueries({ queryKey: ['inventory', 'levels'] });
       onSaved?.(saved);
       onOpenChange(false);
@@ -215,6 +226,7 @@ export function ProductFormDialog({ open, onOpenChange, product, onSaved, defaul
       if (e instanceof ApiError && e.code === 'SKU_EXISTS') form.setError('sku', { message: t('validation.unique') });
       else if (e instanceof ApiError && e.code === 'BARCODE_EXISTS') form.setError('legacyBarcode', { message: t('validation.unique') });
       else if (e instanceof ApiError && e.code === 'INVALID_PLACEMENT') form.setError('shelf', { message: t('products.invalidShelf') });
+      else if (e instanceof ApiError && e.code === 'INVALID_CATEGORY') form.setError('categoryIds', { message: t('products.invalidCategory') });
       else toast.error(e instanceof Error ? e.message : t('common.error'));
     }
   });
@@ -248,7 +260,7 @@ export function ProductFormDialog({ open, onOpenChange, product, onSaved, defaul
                 <TextField control={form.control} name="sku" label={t('products.sku')} required dir="ltr" />
                 <TextField control={form.control} name="partNumber" label={t('products.partNumber')} dir="ltr" />
                 {newBrand === null ? (
-                  <div className="flex items-end gap-1">
+                  <div className="flex items-end gap-1 self-start">
                     <SelectField control={form.control} name="brandId" label={t('products.brand')} options={options.brands} required placeholder={t('common.selectBrand')} className="min-w-0 flex-1" />
                     <Button type="button" variant="outline" size="icon" title={t('products.newBrand')} aria-label={t('products.newBrand')} onClick={() => setNewBrand('')}>
                       <Plus className="size-4" />
@@ -279,12 +291,20 @@ export function ProductFormDialog({ open, onOpenChange, product, onSaved, defaul
                   </FormField>
                 )}
                 {newCategory === null ? (
-                  <div className="flex items-end gap-1">
-                    <SelectField control={form.control} name="categoryId" label={t('products.category')} options={options.categories} required placeholder={t('common.selectCategory')} className="min-w-0 flex-1" />
+                  <FormField label={t('products.categories')} required hint={t('products.categoriesHint')} error={form.formState.errors.categoryIds?.message}>
+                  <div className="flex items-center gap-1">
+                    <Combobox value={null} options={options.categories.filter(c => !selectedCategories.includes(c.value))} ariaLabel={t('products.categories')} placeholder={t('common.selectCategory')} disabled={selectedCategories.length >= 100} onChange={(id) => { if (id) form.setValue('categoryIds', [...selectedCategories, id], { shouldValidate: true, shouldDirty: true }); }} className="min-w-0 flex-1" />
                     <Button type="button" variant="outline" size="icon" title={t('products.newCategory')} aria-label={t('products.newCategory')} onClick={() => setNewCategory('')}>
                       <Plus className="size-4" />
                     </Button>
                   </div>
+                  {selectedCategories.length ? <div className="flex flex-wrap gap-1.5">
+                    {selectedCategories.map(id => {
+                      const label = options.categories.find(c => c.value === id)?.label || tx(categories.find(c => c.id === id)?.name) || t('common.category');
+                      return <span key={id} className="inline-flex max-w-full items-center gap-1 rounded-md border bg-muted px-2 py-1 text-xs"><span className="break-words">{label}</span><button type="button" aria-label={`${t('common.delete')}: ${label}`} onClick={() => form.setValue('categoryIds', selectedCategories.filter(c => c !== id), { shouldValidate: true, shouldDirty: true })} className="shrink-0 rounded p-0.5 text-muted-foreground hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"><X className="size-3" /></button></span>;
+                    })}
+                  </div> : null}
+                  </FormField>
                 ) : (
                   <FormField label={t('products.newCategory')} required hint={t('products.newCategoryHint')}>
                     <div className="flex items-center gap-1">
@@ -355,6 +375,7 @@ export function ProductFormDialog({ open, onOpenChange, product, onSaved, defaul
                   <TextField control={form.control} name="bin" label={t('products.bin')} hint={t('common.optional')} dir="ltr" placeholder="A1-1" />
                 ) : null}
                 <TextField control={form.control} name="legacyBarcode" label={t('upgrade.legacyBarcode')} hint={t('upgrade.legacyBarcodeHint')} dir="ltr" placeholder="6221031000000" />
+                <SwitchField control={form.control} name="isQuickProduct" label={t('products.isQuickProduct')} hint={t('products.isQuickProductHint')} className="md:col-span-2" />
               </FormGrid>
             </TabsContent>
             <TabsContent value="pricing">
@@ -363,11 +384,14 @@ export function ProductFormDialog({ open, onOpenChange, product, onSaved, defaul
                 <TextField control={form.control} name="retail1" type="number" label={tx(tierLabels.retail1)} dir="ltr" disabled={!!product && !canEditPrice} step="0.01" required />
                 <TextField control={form.control} name="retail2" type="number" label={tx(tierLabels.retail2)} dir="ltr" disabled={!!product && !canEditPrice} step="0.01" />
                 <TextField control={form.control} name="wholesale" type="number" label={tx(tierLabels.wholesale)} dir="ltr" disabled={!!product && !canEditPrice} step="0.01" />
+                <TextField control={form.control} name="maxDiscountAmount" type="number" label={t('products.maxDiscountAmount')} hint={t('products.maxDiscountHint')} dir="ltr" disabled={!!product && !canEditPrice} step="0.01" />
               </FormGrid>
-              <div className="mt-3 flex items-center gap-3 rounded-md border bg-muted/30 px-3 py-2 text-sm">
-                <span className="text-muted-foreground">{t('products.margin')}:</span>
-                <span className={`font-semibold num ${margin < 10 ? 'text-destructive' : margin < 20 ? 'text-amber-600' : 'text-success'}`}>{margin.toFixed(1)}%</span>
-                {retail > 0 && retail < cost ? <span className="text-xs text-destructive">{t('pricing.belowCost')}</span> : margin < 10 && retail > 0 ? <span className="text-xs text-amber-600">{t('pricing.marginWarning')}</span> : null}
+              <div className="mt-3 flex flex-wrap items-center gap-3 rounded-md border bg-muted/30 px-3 py-2 text-sm">
+                {[['retail1', tierLabels.retail1, retail], ['retail2', tierLabels.retail2, form.watch('retail2')], ['wholesale', tierLabels.wholesale, form.watch('wholesale')]].map(([key, label, value]) => {
+                  const tierMargin = value && cost ? ((Number(value) - cost) / Number(value)) * 100 : 0;
+                  return <span key={key as string} className="inline-flex items-center gap-1"><span className="text-muted-foreground">{tx(label as typeof tierLabels.retail1)}:</span><span className={`font-semibold num ${tierMargin < 10 ? 'text-destructive' : tierMargin < 20 ? 'text-amber-600' : 'text-success'}`}>{tierMargin.toFixed(1)}%</span></span>;
+                })}
+                {retail > 0 && retail < cost ? <span className="text-xs text-destructive">{t('pricing.belowCost')}</span> : null}
               </div>
               {product && canEditPrice ? (
                 <div className="mt-3">

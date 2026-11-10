@@ -1,16 +1,24 @@
 import { CAIRO_ARABIC_WOFF2, CAIRO_LATIN_WOFF2 } from './invoiceFonts';
 
-/** Shared palette for every printed document so thermal, A5 and A4 read as one family. */
-export const NAVY = '#1E3A6E';
-export const ACCENT = '#2F5FA7';
-export const LIGHT = '#F3F6FB';
-export const BORDER = '#D6DEEA';
+/** Colored palette shared by the thermal and A4 invoices. */
+export const NAVY = '#C62828';
+export const ACCENT = '#1565C0';
+export const LIGHT = '#FFF8E1';
+export const BORDER = '#F2C94C';
 export const TEXT = '#1A1A1A';
 export const MUTED = '#5B6B82';
 export const DANGER = '#B42318';
 
+export const INK = NAVY;
+export const PAPER = LIGHT;
+export const MONOCHROME_IMAGE_CSS = '';
+
 export const INVOICE_FONT_STACK =
   "'MotoInvoiceCairo', 'Cairo Variable', 'Cairo', 'Tajawal', 'Noto Sans Arabic', 'Segoe UI', Tahoma, sans-serif";
+
+export function invoiceColors() {
+  return { primary: NAVY, accent: ACCENT };
+}
 
 // Embedded as data URLs so the markup stays self-contained when Electron prints `outerHTML` from a data: page.
 export const FONT_FACE_CSS = `

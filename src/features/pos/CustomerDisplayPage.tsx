@@ -1,6 +1,6 @@
 import React from 'react';
 import { PosLocaleContext, cartTotals, usePosT } from '@moto/pos-core';
-import { DEFAULT_SETTINGS, tx } from '@moto/shared';
+import { DEFAULT_SETTINGS, round2, saleLineDiscount, tx } from '@moto/shared';
 import { useAuthStore } from '@/stores/authStore';
 import { useUiStore } from '@/stores/uiStore';
 import { displayChannelName, type DisplaySnapshot } from './customerDisplay';
@@ -9,7 +9,6 @@ function CustomerDisplay({ state }: { state: DisplaySnapshot }) {
   const { p, tx: t, locale } = usePosT();
   const company = tx(state.settings.company.name, locale);
   const currency = state.settings.currency;
-  const invoice = state.settings.invoice;
   const fmt = React.useCallback(
     (v: number) => {
       const n = new Intl.NumberFormat('en-US', { minimumFractionDigits: currency.decimals, maximumFractionDigits: currency.decimals }).format(v);
@@ -18,7 +17,7 @@ function CustomerDisplay({ state }: { state: DisplaySnapshot }) {
     },
     [currency, locale],
   );
-  const totals = cartTotals(state.lines, state.invoiceDiscount, invoice);
+  const totals = cartTotals(state.lines, state.invoiceDiscount);
   return (
     <div className="flex h-dvh flex-col overflow-hidden bg-slate-950 p-8 text-white" dir={locale === 'ar' ? 'rtl' : 'ltr'}>
       <div className="flex items-center justify-between border-b border-white/10 pb-4">
@@ -39,15 +38,15 @@ function CustomerDisplay({ state }: { state: DisplaySnapshot }) {
                   <tr key={l.productId} className="border-b border-white/10">
                     <td className="py-3">{t(l.name)}</td>
                     <td className="py-3 text-center num text-white/70">{l.quantity} × {fmt(l.unitPrice)}</td>
-                    <td className="py-3 text-end num font-semibold">{fmt(l.unitPrice * l.quantity * (1 - l.discountPercent / 100))}</td>
+                    <td className="py-3 text-end num font-semibold">{fmt(round2(l.unitPrice * l.quantity - saleLineDiscount(l)))}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
           <div className="mt-4 border-t border-white/20 pt-4">
-            {totals.itemDiscounts + state.invoiceDiscount > 0 ? <div className="flex justify-between text-2xl text-white/70"><span>{p.receipt.discount}</span><span className="num">-{fmt(totals.itemDiscounts + state.invoiceDiscount)}</span></div> : null}
-            {totals.tax > 0 ? <div className="flex justify-between text-2xl text-white/70"><span>{p.receipt.tax}</span><span className="num">{fmt(totals.tax)}</span></div> : null}
+            {totals.itemDiscounts > 0 ? <div className="flex justify-between text-xl text-white/70"><span>{p.itemDiscount}</span><span className="num">−{fmt(totals.itemDiscounts)}</span></div> : null}
+            {state.invoiceDiscount > 0 ? <div className="flex justify-between text-xl text-white/70"><span>{p.invoiceDiscount}</span><span className="num">−{fmt(state.invoiceDiscount)}</span></div> : null}
             <div className="flex items-baseline justify-between"><span className="text-3xl">{p.total}</span><span className="text-6xl font-bold num">{fmt(totals.total)}</span></div>
           </div>
         </>

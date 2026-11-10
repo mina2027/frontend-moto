@@ -16,6 +16,7 @@ import { Combobox } from '@/components/shared/pickers';
 import { FormGrid, TextField } from '@/components/shared/form';
 import { EmptyState, LoadingState } from '@/components/shared/states';
 import { productService } from '@/services';
+import { productCategoryIds } from '@moto/shared';
 import { useAuthStore } from '@/stores/authStore';
 import { useLookups } from '@/hooks/useLookups';
 import { useT } from '@/i18n';
@@ -40,7 +41,7 @@ export default function CompatibilityPage() {
     qc.invalidateQueries({ queryKey: ['product', pid] });
   };
 
-  const filtered = React.useMemo(() => (products.data ?? []).filter((p) => p.isActive && (!categoryId || p.categoryId === categoryId) && matchSearch([p.name.ar, p.name.en, p.sku, p.partNumber], search)), [products.data, categoryId, search]);
+  const filtered = React.useMemo(() => (products.data ?? []).filter((p) => p.isActive && (!categoryId || productCategoryIds(p).includes(categoryId)) && matchSearch([p.name.ar, p.name.en, p.sku, p.partNumber], search)), [products.data, categoryId, search]);
   const selectedProduct = products.data?.find((p) => p.id === productId);
   const modelProducts = modelId ? (products.data ?? []).filter((p) => p.compatibleModelIds.includes(modelId)) : [];
 
@@ -81,7 +82,7 @@ export default function CompatibilityPage() {
           <div className="grid gap-3 lg:grid-cols-3">
             <Section title={t('compat.byProduct')}>
               <Combobox value={productId} onChange={setProductId} options={options.products} placeholder={t('common.selectProduct')} />
-              {selectedProduct ? <div className="mt-3 space-y-1 text-sm"><div className="font-medium">{tx(selectedProduct.name)}</div><div className="text-xs text-muted-foreground">{selectedProduct.partNumber} · {categoryName(selectedProduct.categoryId)}</div></div> : null}
+              {selectedProduct ? <div className="mt-3 space-y-1 text-sm"><div className="font-medium">{tx(selectedProduct.name)}</div><div className="text-xs text-muted-foreground">{selectedProduct.partNumber} · {productCategoryIds(selectedProduct).map(categoryName).join('، ')}</div></div> : null}
             </Section>
             <Section title={t('products.compatibleModels')} className="lg:col-span-2">
               {!selectedProduct ? <EmptyState icon={<Bike />} title={t('common.selectProduct')} /> : (
@@ -107,7 +108,7 @@ export default function CompatibilityPage() {
             </Section>
             <Section title={t('compat.compatibleProducts')} className="lg:col-span-2">
               {!modelId ? <EmptyState icon={<Bike />} title={t('compat.model')} /> : modelProducts.length === 0 ? <EmptyState /> : (
-                <table className="w-full text-sm"><thead className="text-xs text-muted-foreground"><tr><th className="pb-2 text-start font-medium">{t('common.product')}</th><th className="pb-2 text-start font-medium">{t('common.partNumber')}</th><th className="pb-2 text-start font-medium">{t('common.category')}</th><th className="pb-2 text-end font-medium">{t('common.price')}</th><th className="pb-2 text-end font-medium">{t('pos.stock')}</th>{canEdit ? <th /> : null}</tr></thead><tbody>{modelProducts.map((p) => <tr key={p.id} className="border-t"><td className="py-1.5"><Link to={`/products/${p.id}`} className="hover:underline">{tx(p.name)}</Link></td><td className="py-1.5 num text-xs">{p.partNumber}</td><td className="py-1.5 text-xs">{categoryName(p.categoryId)}</td><td className="py-1.5 text-end num">{p.prices.retail1}</td><td className="py-1.5 text-end num">{p.totalStock}</td>{canEdit ? <td className="py-1.5 text-end"><Button size="xs" variant="ghost" onClick={() => toggle(p.id, modelId, false)}>{t('compat.unlinkModel')}</Button></td> : null}</tr>)}</tbody></table>
+                <table className="w-full text-sm"><thead className="text-xs text-muted-foreground"><tr><th className="pb-2 text-start font-medium">{t('common.product')}</th><th className="pb-2 text-start font-medium">{t('common.partNumber')}</th><th className="pb-2 text-start font-medium">{t('common.category')}</th><th className="pb-2 text-end font-medium">{t('common.price')}</th><th className="pb-2 text-end font-medium">{t('pos.stock')}</th>{canEdit ? <th /> : null}</tr></thead><tbody>{modelProducts.map((p) => <tr key={p.id} className="border-t"><td className="py-1.5"><Link to={`/products/${p.id}`} className="hover:underline">{tx(p.name)}</Link></td><td className="py-1.5 num text-xs">{p.partNumber}</td><td className="py-1.5 text-xs">{productCategoryIds(p).map(categoryName).join('، ')}</td><td className="py-1.5 text-end num">{p.prices.retail1}</td><td className="py-1.5 text-end num">{p.totalStock}</td>{canEdit ? <td className="py-1.5 text-end"><Button size="xs" variant="ghost" onClick={() => toggle(p.id, modelId, false)}>{t('compat.unlinkModel')}</Button></td> : null}</tr>)}</tbody></table>
               )}
             </Section>
           </div>

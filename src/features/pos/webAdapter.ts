@@ -1,9 +1,9 @@
 import type { ConnectivityState, PosAdapter, PosProduct } from '@moto/pos-core';
-import { pageStyleFor } from '@moto/pos-core';
 import type { ID, Locale, Permission, PrintProfile, User } from '@/types';
-import { PAPER_SIZES, uuid } from '@moto/shared';
-import { api, devicePrintPref } from '@/services';
+import { api } from '@/services';
+import { printBrowserInvoice } from '@/lib/invoicePrint';
 import type { ProductWithStock } from '@/services/productService';
+import { retryableWrite } from '@/lib/retryableWrite';
 
 const toPos = (p: ProductWithStock, branchId: ID): PosProduct => ({ ...p, available: p.saleStock ?? p.branchStock[branchId] ?? 0, location: p.saleLocation });
 
@@ -48,25 +48,17 @@ export function createWebPosAdapter(opts: WebPosAdapterOptions): PosAdapter {
       return p ? toPos(p, branchId) : null;
     },
     customers: () => api.customers.all(),
-    createCustomer: (input) => api.customers.save(input, uuid()),
+    createCustomer: (input) => retryableWrite(`pos:customer:${user.id}:${branchId}`, input, key => api.customers.save(input, key)),
     specialPrices: () => api.customers.specialPrices(),
-    quickGrid: async () => {
-      const [products, categories, catalog] = await Promise.all([api.quick.products(branchId), api.quick.categories(branchId), api.products.all(branchId)]);
-      return { products, categories, catalog: catalog.map((p) => toPos(p, branchId)) };
-    },
+    catalog: async () => (await api.products.all(branchId)).map((p) => toPos(p, branchId)),
     catalogMeta: async () => {
-      const [categories, brands, models] = await Promise.all([api.products.categories(), api.products.brands(), api.products.models()]);
+      const [categories, brands, models] = await Promise.all([
+        api.products.categories(), api.products.brands(), api.products.models(),
+      ]);
       return { categories, brands, models };
     },
-    saveQuickProduct: (input) => api.quick.saveProduct(input),
-    deleteQuickProduct: async (id) => {
-      await api.quick.deleteProduct(id);
-    },
-    reorderQuick: async (ids) => {
-      await api.quick.reorder(ids);
-    },
     currentSession: session,
-    createSale: (input) => api.sales.create(input, uuid()),
+    createSale: (input) => retryableWrite(`pos:sale:${user.id}:${branchId}`, input, key => api.sales.create(input, key)),
     lastSale: (id) => api.sales.get(id).catch(() => null),
     saleByInvoice: (invoiceNumber) => api.sales.findByInvoiceNumber(invoiceNumber).catch(() => null),
     recentSales: async (limit = 30) => {
@@ -74,36 +66,25 @@ export function createWebPosAdapter(opts: WebPosAdapterOptions): PosAdapter {
       const page = await api.sales.list({ branchId, pageSize: limit });
       return page.data;
     },
-    createSaleReturn: (input) => api.sales.createReturn(input, uuid()),
+    salesHistory: (query) => api.sales.list({ ...query, branchId }),
+    createSaleReturn: (input) => retryableWrite(`pos:return:${user.id}:${branchId}`, input, key => api.sales.createReturn(input, key)),
     cashMovement: async (input) => {
       const open = await session();
       if (!open) throw new Error('NO_OPEN_SESSION');
-      await api.cash.addMovement(open.id, input, uuid());
-      return (await session()) ?? open;
+      return retryableWrite(`pos:cash:${user.id}:${open.id}`, input, async key => {
+        await api.cash.addMovement(open.id, input, key);
+        return (await session()) ?? open;
+      });
     },
-    collectDebt: (input) => api.customers.recordPayment({ customerId: input.customerId, debtId: null, amount: input.amount, method: input.method, reference: '', branchId, notes: input.notes }, uuid()),
+    collectDebt: (input) => retryableWrite(`pos:payment:${user.id}:${branchId}`, input, key => api.customers.recordPayment({ customerId: input.customerId, debtId: null, amount: input.amount, method: input.method, reference: '', branchId, notes: input.notes }, key)),
     branchName,
     alternatives: (productId) => api.products.alternatives(productId, branchId, false),
     requestTransfer: async (productId, fromBranchId, qty) => {
       await api.inventory.createTransfer({ sourceBranchId: fromBranchId, destinationBranchId: branchId, items: [{ productId, requestedQty: qty }], submit: true });
     },
-    printProfiles: () => api.settings.printProfiles(branchId),
-    getDevicePrintProfile: () => devicePrintPref.get(),
-    setDevicePrintProfile: (id) => devicePrintPref.set(id),
     print: async (el: HTMLElement | null, profile: PrintProfile | null) => {
-      // The terminal mounts the receipt in `.print-area`; index.css hides everything else while printing.
-      await new Promise((r) => setTimeout(r, 50));
       if (!el || !profile) throw new Error(locale === 'ar' ? 'تعذّر تجهيز محتوى الفاتورة للطباعة' : 'Invoice content is not ready to print');
-      const paper = PAPER_SIZES[profile.paper];
-      const heightMm = paper.heightMm === 'auto' ? Math.max(30, Math.ceil(el.getBoundingClientRect().height * 25.4 / 96 + 4)) : undefined;
-      const style = document.createElement('style');
-      style.textContent = pageStyleFor(profile, heightMm);
-      document.body.appendChild(style);
-      try {
-        window.print();
-      } finally {
-        style.remove();
-      }
+      await printBrowserInvoice(el, profile);
     },
     navigate,
     openCustomerDisplay: opts.openCustomerDisplay,

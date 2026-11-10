@@ -81,7 +81,7 @@ export function createApiClient(options: HttpClientOptions) {
 
   const products = {
     list: (query: ProductQuery = {}) => http.get<Paginated<ProductWithStock>>('/products', { query: q(query) }),
-    all: (branchId?: string) => http.get<ProductWithStock[]>('/products/all', { query: { branchId } }),
+    all: (branchId?: string, includeDeleted = false) => http.get<ProductWithStock[]>('/products/all', { query: { branchId, ...(includeDeleted ? { includeDeleted: true } : {}) } }),
     get: (id: string, branchId?: string) => http.get<ProductWithStock>(`/products/${id}`, { query: { branchId } }),
     lookup: (term: string, branchId?: string, limit = 12) => http.get<ProductWithStock[]>('/products/lookup', { query: { term, branchId, limit } }),
     lookupWithHint: async (term: string, branchId?: string, limit = 12) => {
@@ -90,6 +90,7 @@ export function createApiClient(options: HttpClientOptions) {
     },
     create: (input: ProductCreateInput) => http.post<ProductWithStock>('/products', input),
     update: (id: string, patch: ProductUpdateInput) => http.patch<ProductWithStock>(`/products/${id}`, patch),
+    delete: (id: string) => http.delete<{ ok: true }>(`/products/${id}`),
     bulkUpdate: (ids: string[], patch: ProductUpdateInput) => http.post<{ count: number }>('/products/bulk', { ids, patch }),
     stockLevels: (id: string) => http.get<StockLevel[]>(`/products/${id}/stock`),
     priceHistory: (query: { productId?: string; userId?: string; field?: string; branchId?: string; from?: string; to?: string; pageSize?: number } = {}) =>
@@ -119,7 +120,7 @@ export function createApiClient(options: HttpClientOptions) {
     held: (branchId: string) => http.get<Sale[]>('/sales/held', { query: { branchId } }),
     create: (input: SaleCreateInput, idempotencyKey?: string) => http.post<Sale>('/sales', input, { idempotencyKey }),
     resumeHeld: (id: string) => http.post<Sale>(`/sales/${id}/resume`),
-    cancel: (id: string, refundMethod?: import('@moto/shared').PaymentMethod) => http.post<Sale>(`/sales/${id}/cancel`, { refundMethod }),
+    cancel: (id: string, refundMethod?: import('@moto/shared').PaymentMethod, registerSessionId?: string) => http.post<Sale>(`/sales/${id}/cancel`, { refundMethod, registerSessionId }),
     returns: (query: ListQuery = {}) => http.get<Paginated<SaleReturn>>('/sales/returns', { query: q(query) }),
     createReturn: (input: SaleReturnCreateInput, idempotencyKey?: string) => http.post<SaleReturn>('/sales/returns', input, { idempotencyKey }),
     stats: (branchId?: string) => http.get<{ count: number; total: number; avg: number; todayCount: number; todayTotal: number; cash: number; credit: number }>('/sales/stats', { query: { branchId } }),

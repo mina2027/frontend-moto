@@ -48,9 +48,15 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: 'moto-auth',
-      partialize: (s) => ({ session: s.session, status: s.status }),
+      // A pending request cannot survive a reload; only persist the session.
+      partialize: (s) => ({ session: s.session }),
+      merge: (persisted, current) => {
+        const session = (persisted as { session?: Session | null } | undefined)?.session ?? null;
+        // Ignore status saved by older versions, including stale "loading".
+        return { ...current, session, status: session ? 'authenticated' : 'idle' };
+      },
       onRehydrateStorage: () => (state) => {
-        if (state?.session) setApiSession(state.session);
+        setApiSession(state?.session ?? null);
       },
     },
   ),

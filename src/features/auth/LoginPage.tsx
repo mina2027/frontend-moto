@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Alert } from '@/components/ui/misc';
+import { DeveloperCredit } from '@/components/shared/developer-credit';
 import { HomeRedirect } from './HomeRedirect';
 import { useAuthStore } from '@/stores/authStore';
 import { useUiStore } from '@/stores/uiStore';
@@ -23,6 +24,7 @@ export default function LoginPage() {
 
   const schema = z.object({ username: z.string().min(1, t('validation.required')), password: z.string().min(1, t('validation.required')) });
   const form = useForm<z.infer<typeof schema>>({ resolver: zodResolver(schema), defaultValues: { username: '', password: '' } });
+  const isSubmitting = form.formState.isSubmitting;
   const modules = [
     { Icon: Store, title: t('nav.sales'), sub: t('nav.cashRegisters') },
     { Icon: Boxes, title: t('nav.inventory'), sub: t('nav.transfers') },
@@ -94,8 +96,9 @@ export default function LoginPage() {
               {form.formState.errors.password ? <p className="text-xs text-destructive">{form.formState.errors.password.message}</p> : null}
             </div>
             {error ? <Alert variant="destructive">{error}</Alert> : null}
-            <Button type="submit" className="w-full" loading={status === 'loading'}>{status === 'loading' ? t('auth.loggingIn') : t('auth.login')}</Button>
+            <Button type="submit" className="w-full" loading={isSubmitting}>{isSubmitting ? t('auth.loggingIn') : t('auth.login')}</Button>
           </form>
+          <DeveloperCredit />
         </div>
       </div>
     </div>

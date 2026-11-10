@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { DEFAULT_SETTINGS, PAPER_SIZES, defaultPrintProfiles, type PaperKind, type PrintProfile, type Sale } from '@moto/shared';
 import { InvoiceDocument, pageStyleFor } from './templates';
-import { profileForSize } from './profiles';
+import { checkoutProfileForSize, profileForSize } from './profiles';
 
 const sale: Sale = {
   id: 's1',
@@ -34,12 +34,20 @@ const profileFor = (paper: PaperKind, extra: Partial<PrintProfile> = {}): PrintP
   ...extra,
 });
 
-const papers: PaperKind[] = ['thermal58', 'thermal80', 'a5', 'a4'];
+const papers: PaperKind[] = ['thermal80', 'a4'];
 
 describe('invoice templates across every paper size', () => {
+  it.each(papers)('prints saved multiline invoice notes on %s', (paper) => {
+    const notes = 'تسليم غداً\nالاتصال قبل التسليم <script>';
+    const { container } = render(<InvoiceDocument sale={{ ...sale, notes }} profile={profileFor(paper)} settings={DEFAULT_SETTINGS} />);
+    const section = container.querySelector('.mpi-notes, .mpt-notes')!;
+    expect(section.textContent).toContain(notes);
+    expect(section.querySelector('script')).toBeNull();
+    expect(section.querySelector('div')!.style.whiteSpace).toBe('pre-wrap');
+  });
   it.each([
-    ['small', 'thermal58', '.mpt', 'width: 58mm', '@page { size: 58mm 174mm; margin: 0; }'],
-    ['large', 'a5', '.mpi', 'width: 148.492mm', '@page { size: 148mm 210mm; margin: 0; }'],
+    ['small', 'thermal80', '.mpt', 'width: 80mm', '@page { size: 80mm 240mm; margin: 0mm; }'],
+    ['large', 'a4', '.mpi', 'width: 210mm', '@page { size: 210mm 297mm; margin: 0mm; }'],
   ] as const)('renders the %s selection using the saved %s paper dimensions', (size, oldPaper, selector, width, page) => {
     const profile = profileForSize([profileFor(oldPaper)], size, null);
     const { container } = render(<InvoiceDocument sale={sale} profile={profile} settings={DEFAULT_SETTINGS} />);
@@ -68,16 +76,16 @@ describe('invoice templates across every paper size', () => {
   });
 
   it('sizes browser roll pages to the measured content height', () => {
-    expect(pageStyleFor(profileFor('thermal80'), 420)).toContain('@page { size: 80mm 420mm; margin: 0; }');
-    expect(pageStyleFor(profileFor('a4'), 420)).toContain('@page { size: 210mm 297mm; margin: 0; }');
+    expect(pageStyleFor(profileFor('thermal80'), 420)).toContain('@page { size: 80mm 420mm; margin: 0mm; }');
+    expect(pageStyleFor(profileFor('a4'), 420)).toContain('@page { size: 210mm 297mm; margin: 0mm; }');
   });
 
   it('detailed mode prints the part number, compact mode does not', () => {
-    const detailed = render(<InvoiceDocument sale={sale} profile={profileFor('a5', { detail: 'detailed', showPartNumber: true })} settings={DEFAULT_SETTINGS} />);
+    const detailed = render(<InvoiceDocument sale={sale} profile={profileFor('a4', { detail: 'detailed', showPartNumber: true })} settings={DEFAULT_SETTINGS} />);
     expect(detailed.container.textContent).toContain('HND-13011');
     detailed.unmount();
 
-    const compact = render(<InvoiceDocument sale={sale} profile={profileFor('a5', { detail: 'compact', showPartNumber: true })} settings={DEFAULT_SETTINGS} />);
+    const compact = render(<InvoiceDocument sale={sale} profile={profileFor('a4', { detail: 'compact', showPartNumber: true })} settings={DEFAULT_SETTINGS} />);
     expect(compact.container.textContent).not.toContain('HND-13011');
   });
 
@@ -85,25 +93,37 @@ describe('invoice templates across every paper size', () => {
     const { container } = render(<InvoiceDocument sale={sale} profile={profileFor(paper)} settings={DEFAULT_SETTINGS} />);
     const root = container.querySelector('.mpi, .mpt')!;
     expect(root).toBeTruthy();
-    // Shared chrome: the navy invoice banner, the table head and the grand-total bar.
+    // Shared invoice banner, table heading and grand-total bar.
     expect(container.querySelector('.mpi-banner, .mpt-banner')).toBeTruthy();
     expect(container.querySelector('.mpi-table, .mpt-table')).toBeTruthy();
     expect(container.querySelector('.mpi-grand, .mpt-grand')).toBeTruthy();
     expect(container.textContent).toContain('\u0641\u0627\u062a\u0648\u0631\u0629 \u0645\u0628\u064a\u0639\u0627\u062a');
   });
 
-  it('renders A5 as the A4 sheet scaled by 1/\u221a2', () => {
-    const a4 = render(<InvoiceDocument sale={sale} profile={profileFor('a4')} settings={DEFAULT_SETTINGS} />);
-    expect(a4.container.querySelector('style')!.textContent).toContain('width: 210mm');
-    a4.unmount();
-
-    const a5 = render(<InvoiceDocument sale={sale} profile={profileFor('a5')} settings={DEFAULT_SETTINGS} />);
-    const css = a5.container.querySelector('style')!.textContent!;
-    expect(a5.container.querySelector('.mpi')).toBeTruthy();
-    expect(css).toContain(`width: ${Math.round((210 / Math.SQRT2) * 1000) / 1000}mm`);
+  it.each([
+    ['checkout', checkoutProfileForSize('small')],
+    ['saved compact', profileFor('thermal80', { detail: 'compact', showPartNumber: false, showCompatibility: false })],
+  ] as const)('keeps warranty, exchange and item details in the %s small invoice', (_label, profile) => {
+    const warrantyNotes = ['الضمان يشمل عيوب الصناعة.', 'الاستبدال خلال 14 يوم مع أصل الفاتورة.'];
+    const { container } = render(<InvoiceDocument sale={sale} profile={profile} settings={DEFAULT_SETTINGS} store={{ warrantyNotes }} />);
+    const receipt = container.querySelector('.mpt')!;
+    for (const note of warrantyNotes) expect(receipt.textContent).toContain(note);
+    expect(receipt.textContent).toContain('HND-13011');
+    expect(receipt.textContent).toContain('MP000011');
+    expect(receipt.textContent).toContain('HND-06430');
+    expect(receipt.querySelectorAll('.mpt-sign-box')).toHaveLength(1);
+    expect(receipt.querySelectorAll('.mpt-sign-line')).toHaveLength(2);
   });
 
-  it.each(['thermal58', 'thermal80'] as const)('%s uses the narrow roll layout', (paper) => {
+  it('keeps the A4 canvas at full paper size inside narrow preview containers', () => {
+    const { container } = render(<InvoiceDocument sale={sale} profile={profileFor('a4')} settings={DEFAULT_SETTINGS} />);
+    const css = container.querySelector('style')!.textContent!;
+    expect(css).toContain('width: 210mm');
+    expect(css).toContain('min-height: 297mm');
+    expect(css).toContain('max-width: none');
+  });
+
+  it.each(['thermal80'] as const)('%s uses the narrow roll layout', (paper) => {
     const { container } = render(<InvoiceDocument sale={sale} profile={profileFor(paper)} settings={DEFAULT_SETTINGS} />);
     expect(container.querySelector('.mpt')).toBeTruthy();
     expect(container.querySelector('.mpi')).toBeNull();
@@ -112,13 +132,13 @@ describe('invoice templates across every paper size', () => {
 });
 
 describe('company and review stamps', () => {
-  it('shows the company stamp on A5 when enabled and hides it when off', () => {
-    const on = render(<InvoiceDocument sale={sale} profile={profileFor('a5', { showStamp: true })} settings={DEFAULT_SETTINGS} />);
-    expect(screen.getByText('توقيع العميل')).toBeTruthy();
+  it('shows the company stamp on A4 when enabled and hides it when off', () => {
+    const on = render(<InvoiceDocument sale={sale} profile={profileFor('a4', { showStamp: true })} settings={DEFAULT_SETTINGS} />);
+    expect(screen.getByText('توقيع المراجع')).toBeTruthy();
     expect(on.container.querySelector('.mpi-stamp')).toBeTruthy();
     on.unmount();
 
-    const off = render(<InvoiceDocument sale={sale} profile={profileFor('a5', { showStamp: false, showReviewStamp: false })} settings={DEFAULT_SETTINGS} />);
+    const off = render(<InvoiceDocument sale={sale} profile={profileFor('a4', { showStamp: false, showReviewStamp: false })} settings={DEFAULT_SETTINGS} />);
     expect(off.container.querySelector('.mpi-stamp')).toBeNull();
     expect(off.container.querySelector('.mpi-reviewed')).toBeNull();
   });
@@ -135,11 +155,11 @@ describe('company and review stamps', () => {
   });
 
   it('shows the review stamp only when the profile asks for it', () => {
-    const off = render(<InvoiceDocument sale={sale} profile={profileFor('a5', { showReviewStamp: false })} settings={DEFAULT_SETTINGS} />);
+    const off = render(<InvoiceDocument sale={sale} profile={profileFor('a4', { showReviewStamp: false })} settings={DEFAULT_SETTINGS} />);
     expect(off.container.textContent).not.toContain('تم المراجعة');
     off.unmount();
 
-    render(<InvoiceDocument sale={sale} profile={profileFor('a5', { showReviewStamp: true })} settings={DEFAULT_SETTINGS} />);
+    render(<InvoiceDocument sale={sale} profile={profileFor('a4', { showReviewStamp: true })} settings={DEFAULT_SETTINGS} />);
     expect(screen.getByText('تم المراجعة')).toBeTruthy();
   });
 

@@ -34,7 +34,9 @@ export default function TransferDetailsPage() {
   if (q.isError || !q.data) return <ErrorState onRetry={() => q.refetch()} />;
   const tr = q.data;
   const idx = FLOW.indexOf(tr.status);
-  const canApprove = hasPermission('inventory.transfer_approve');
+  const canSource = hasPermission('branches.all') || user.branchId === tr.sourceBranchId;
+  const canDestination = hasPermission('branches.all') || user.branchId === tr.destinationBranchId;
+  const canApprove = canSource && hasPermission('inventory.transfer_approve');
   const run = async () => {
     if (!action) return;
     await inventoryService.advanceTransfer(tr.id, action.next, user.id, undefined, action.next === 'sent' || action.next === 'received' ? qty : undefined);
@@ -50,9 +52,9 @@ export default function TransferDetailsPage() {
         actions={<>
           {tr.status === 'draft' ? <Button onClick={() => open('requested', t('transfers.actions.submit'), '')}><Send /> {t('transfers.actions.submit')}</Button> : null}
           {tr.status === 'requested' && canApprove ? <><Button variant="destructive" onClick={() => open('rejected', t('transfers.confirmReject'), '', 'destructive')}><X /> {t('transfers.actions.reject')}</Button><Button variant="success" onClick={() => open('approved', t('transfers.confirmApprove'), t('transfers.confirmApproveDesc'), 'success')}><Check /> {t('transfers.actions.approve')}</Button></> : null}
-          {tr.status === 'approved' ? <Button onClick={() => open('sent', t('transfers.confirmSend'), t('transfers.confirmSendDesc'), 'warning')}><Send /> {t('transfers.actions.send')}</Button> : null}
-          {tr.status === 'sent' ? <Button variant="success" onClick={() => open('received', t('transfers.confirmReceive'), t('transfers.confirmReceiveDesc'), 'success')}><PackageCheck /> {t('transfers.actions.receive')}</Button> : null}
-          {tr.status === 'received' ? <Button onClick={() => open('completed', t('transfers.actions.complete'), '')}><CheckCircle2 /> {t('transfers.actions.complete')}</Button> : null}
+          {tr.status === 'approved' && canSource ? <Button onClick={() => open('sent', t('transfers.confirmSend'), t('transfers.confirmSendDesc'), 'warning')}><Send /> {t('transfers.actions.send')}</Button> : null}
+          {tr.status === 'sent' && canDestination ? <Button variant="success" onClick={() => open('received', t('transfers.confirmReceive'), t('transfers.confirmReceiveDesc'), 'success')}><PackageCheck /> {t('transfers.actions.receive')}</Button> : null}
+          {tr.status === 'received' && canDestination ? <Button onClick={() => open('completed', t('transfers.actions.complete'), '')}><CheckCircle2 /> {t('transfers.actions.complete')}</Button> : null}
         </>} />
 
       <Section title={t('transfers.workflow')} className="mb-3">

@@ -11,7 +11,7 @@ export const DEFAULT_ALERT_SETTINGS: AlertSettings = {
   largeReturnAmount: 2000,
   maxReturnsPerCashierPerDay: 5,
   registerVarianceAmount: 50,
-  unusualDiscountPercent: 25,
+  unusualDiscountAmount: 25,
   maxVoidsPerCashierPerDay: 3,
   whatsappManagerPhone: '',
   whatsappOnCritical: false,
@@ -47,7 +47,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
     footerText: { ar: '', en: '' },
     showLogo: true,
     showTax: false,
-    taxRate: 14,
+    taxEnabled: false,
+    taxRate: 0,
     allowNegativeStock: false,
   },
   receipt: {
@@ -68,7 +69,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
     defaultPaymentMethod: 'cash',
     autoPrint: true,
     requireCustomerForCredit: true,
-    maxDiscountPercent: 15,
+    maxDiscountAmount: 15,
     soundOnScan: true,
     openDrawerOnSale: true,
     defaultPriceTier: 'retail1',
@@ -99,14 +100,15 @@ export function mergeAppSettings(value: Partial<AppSettings> | null | undefined)
   for (const key of Object.keys(DEFAULT_SETTINGS) as (keyof AppSettings)[]) {
     out[key] = { ...(DEFAULT_SETTINGS[key] as object), ...((v[key] as object | undefined) ?? {}) };
   }
-  return out as unknown as AppSettings;
+  const settings = out as unknown as AppSettings;
+  settings.invoice = { ...settings.invoice, showTax: false, taxEnabled: false, taxRate: 0, allowNegativeStock: false };
+  settings.receipt = { ...settings.receipt, paperWidth: 80 };
+  return settings;
 }
 
 export const PAPER_SIZES: Record<PaperKind, { widthMm: number; heightMm: number | 'auto'; label: string }> = {
   thermal80: { widthMm: 80, heightMm: 'auto', label: '80mm' },
-  thermal58: { widthMm: 58, heightMm: 'auto', label: '58mm' },
   a4: { widthMm: 210, heightMm: 297, label: 'A4' },
-  a5: { widthMm: 148, heightMm: 210, label: 'A5' },
 };
 
 export const LABEL_PRESETS: { name: string; widthMm: number; heightMm: number }[] = [
@@ -138,9 +140,7 @@ export function defaultPrintProfiles(): PrintProfile[] {
   return [
     { ...base, id: 'pp-thermal80', name: 'Thermal 80mm — compact', paper: 'thermal80', detail: 'compact', showCompatibility: false, showPartNumber: false, isDefault: true },
     { ...base, id: 'pp-thermal80-detailed', name: 'Thermal 80mm — detailed', paper: 'thermal80', detail: 'detailed', showCompatibility: true, showPartNumber: true },
-    { ...base, id: 'pp-thermal58', name: 'Thermal 58mm — compact', paper: 'thermal58', detail: 'compact', showCompatibility: false, showPartNumber: false },
     { ...base, id: 'pp-a4', name: 'A4 invoice — detailed', paper: 'a4', detail: 'detailed', showCompatibility: true, showPartNumber: true },
-    { ...base, id: 'pp-a5', name: 'A5 invoice — compact', paper: 'a5', detail: 'compact', showCompatibility: false, showPartNumber: true },
   ];
 }
 
@@ -160,6 +160,7 @@ export type SyncErrorCode = (typeof SYNC_ERROR_CODES)[keyof typeof SYNC_ERROR_CO
 export const SOCKET_EVENTS = {
   saleCreated: 'sale.created',
   stockChanged: 'stock.changed',
+  productsChanged: 'products.changed',
   debtChanged: 'debt.changed',
   notificationNew: 'notification.new',
   quickProductsChanged: 'quickProducts.changed',

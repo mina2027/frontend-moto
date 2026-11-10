@@ -1,4 +1,6 @@
 import * as React from 'react';
+import { flushSync } from 'react-dom';
+import { checkoutProfileForSize, PrintDialog, PosLocaleContext, type InvoiceSize } from '@moto/pos-core';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -10,12 +12,13 @@ import { ErrorState, PageLoading } from '@/components/shared/states';
 import { ConfirmDialog } from '@/components/shared/confirm-dialog';
 import { Receipt } from '@/features/sales/receipt';
 import { SendWhatsAppDialog } from '@/features/whatsapp/SendWhatsAppDialog';
-import { salesService } from '@/services';
+import { branchService, salesService } from '@/services';
 import { useAuthStore } from '@/stores/authStore';
 import { useLookups } from '@/hooks/useLookups';
 import { useSettings } from '@/hooks/useSettings';
 import { useT } from '@/i18n';
 import { formatDateTime, formatDate } from '@/lib/utils';
+import { printBrowserInvoice } from '@/lib/invoicePrint';
 
 export default function SaleDetailsPage() {
   const { id = '' } = useParams();
@@ -28,9 +31,16 @@ export default function SaleDetailsPage() {
   const { settings } = useSettings();
   const [cancelOpen, setCancelOpen] = React.useState(false);
   const [cancelMethod, setCancelMethod] = React.useState<'cash' | 'card' | 'bank_transfer' | 'credit' | ''>('');
+  const [drawerId, setDrawerId] = React.useState('');
   const [waOpen, setWaOpen] = React.useState(false);
+  const [printOpen, setPrintOpen] = React.useState(false);
+  const [printSize, setPrintSize] = React.useState<InvoiceSize>('small');
+  const printRef = React.useRef<HTMLDivElement>(null);
 
   const q = useQuery({ queryKey: ['sale', id], queryFn: () => salesService.get(id) });
+  const drawersQ = useQuery({ queryKey: ['sessions', 'cancel-drawers', q.data?.branchId], queryFn: () => branchService.sessions({ branchId: q.data!.branchId, status: 'open', pageSize: 500 }).then(r => r.data), enabled: cancelOpen && !!q.data });
+  const drawers = drawersQ.data ?? [];
+  const refundDrawer = drawerId || (drawers.length === 1 ? drawers[0]!.id : '');
   const invoiceNumber = q.data?.invoiceNumber;
   const returnsQ = useQuery({ queryKey: ['sales', 'returns', { saleId: id }], queryFn: () => salesService.returns({ search: invoiceNumber, pageSize: 100 }).then((r) => r.data.filter((x) => x.saleId === id)), enabled: !!invoiceNumber });
   if (q.isLoading) return <PageLoading />;
@@ -50,7 +60,7 @@ export default function SaleDetailsPage() {
         subtitle={`${formatDateTime(sale.date, locale)} · ${branchName(sale.branchId)} · ${userName(sale.cashierId)}`}
         actions={
           <>
-            {hasPermission('sales.print') ? <Button variant="outline" onClick={() => window.print()}><Printer /> {t('common.reprint')}</Button> : null}
+            {hasPermission('sales.print') ? <Button variant="outline" onClick={() => setPrintOpen(true)}><Printer /> {t('common.reprint')}</Button> : null}
             {customer && hasPermission('whatsapp.send') ? <Button variant="outline" onClick={() => setWaOpen(true)}><MessageCircle /> {t('whatsapp.sendInvoice')}</Button> : null}
             {canReturn ? <Button variant="warning" onClick={() => navigate(`/sales/returns?invoice=${sale.invoiceNumber}`)}><Undo2 /> {t('sales.returnInvoice')}</Button> : null}
             {canCancel ? <Button variant="destructive" onClick={() => setCancelOpen(true)}><Ban /> {t('sales.cancelInvoice')}</Button> : null}
@@ -80,7 +90,7 @@ export default function SaleDetailsPage() {
                       <td className="py-1.5 num text-xs">{it.barcode}</td>
                       <td className="py-1.5 text-center num">{it.quantity}</td>
                       <td className="py-1.5 text-end"><Money value={it.unitPrice} /></td>
-                      <td className="py-1.5 text-end">{it.discount ? <span className="text-destructive"><Money value={-it.discount} /> <span className="text-xs">({it.discountPercent}%)</span></span> : '—'}</td>
+                      <td className="py-1.5 text-end">{it.discount ? <span className="text-destructive"><Money value={-it.discount} /></span> : '—'}</td>
                       <td className="py-1.5 text-end font-medium"><Money value={it.subtotal} /></td>
                     </tr>
                   ))}
@@ -108,15 +118,22 @@ export default function SaleDetailsPage() {
           ) : null}
         </div>
         <div>
-          <Section title={t('sales.receipt')} actions={<Button size="xs" variant="ghost" onClick={() => window.print()}><Printer /></Button>}>
+          <Section title={t('sales.receipt')} actions={hasPermission('sales.print') ? <Button size="xs" variant="ghost" aria-label={t('common.print')} onClick={() => setPrintOpen(true)}><Printer /></Button> : undefined}>
             <div className="overflow-auto rounded border bg-white"><Receipt sale={sale} /></div>
           </Section>
         </div>
       </div>
-      <div className="print-area hidden print:block"><Receipt sale={sale} /></div>
+      <div className="fixed -left-[10000px] top-0" aria-hidden><Receipt ref={printRef} sale={sale} size={printSize} /></div>
+      <PosLocaleContext.Provider value={locale}>
+        <PrintDialog open={printOpen} onOpenChange={setPrintOpen} initialSize={printSize} title={t('common.reprint')} onPrint={async (size) => {
+          flushSync(() => setPrintSize(size));
+          await printBrowserInvoice(printRef.current, checkoutProfileForSize(size));
+        }} />
+      </PosLocaleContext.Provider>
 
-      <ConfirmDialog open={cancelOpen} onOpenChange={setCancelOpen} title={t('sales.cancelConfirm')} description={t('sales.cancelDesc')} variant="destructive" confirmText={t('sales.cancelInvoice')} onConfirm={async () => { if (!cancelMethod) { toast.error(locale === 'ar' ? 'اختر طريقة ردّ المدفوع أو إلغاء الدين' : 'Choose a refund or debt method'); return; } await salesService.cancel(sale.id, user.id, cancelMethod); toast.success(t('sales.cancelled')); q.refetch(); qc.invalidateQueries({ queryKey: ['sales'] }); }}>
+      <ConfirmDialog open={cancelOpen} onOpenChange={setCancelOpen} title={t('sales.cancelConfirm')} description={t('sales.cancelDesc')} variant="destructive" confirmText={t('sales.cancelInvoice')} onConfirm={async () => { if (!cancelMethod) { toast.error(locale === 'ar' ? 'اختر طريقة ردّ المدفوع أو إلغاء الدين' : 'Choose a refund or debt method'); return; } if (cancelMethod === 'cash' && sale.paid > 0 && !refundDrawer) { toast.error(t('expenses.register')); return; } await salesService.cancel(sale.id, user.id, cancelMethod, refundDrawer || undefined); toast.success(t('sales.cancelled')); q.refetch(); qc.invalidateQueries({ queryKey: ['sales'] }); qc.invalidateQueries({ queryKey: ['pos', 'session'] }); qc.invalidateQueries({ queryKey: ['sessions'] }); }}>
         <label className="my-3 flex items-center gap-2 text-sm">{locale === 'ar' ? 'طريقة ردّ المدفوع بعد إلغاء الدين' : 'Refund method after debt reduction'}<select className="rounded border bg-background p-2" value={cancelMethod} onChange={e => setCancelMethod(e.target.value as typeof cancelMethod)}><option value="">{locale === 'ar' ? 'اختر الطريقة' : 'Choose a method'}</option>{(['cash', 'card', 'bank_transfer', 'credit'] as const).map(method => <option key={method} value={method}>{t(`sales.methods.${method}`)}</option>)}</select></label>
+        {cancelMethod === 'cash' && sale.paid > 0 ? <label className="my-3 flex items-center gap-2 text-sm">{t('expenses.register')}<select className="rounded border bg-background p-2" value={refundDrawer} onChange={e => setDrawerId(e.target.value)}><option value="">{t('expenses.register')}</option>{drawers.map(drawer => <option key={drawer.id} value={drawer.id}>{drawer.registerId} / {userName(drawer.userId)}</option>)}</select></label> : null}
       </ConfirmDialog>
       {customer ? <SendWhatsAppDialog open={waOpen} onOpenChange={setWaOpen} customer={customer} sale={sale} defaultTemplate="invoice" /> : null}
     </div>

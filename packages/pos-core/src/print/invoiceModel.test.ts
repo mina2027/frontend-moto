@@ -97,6 +97,11 @@ describe('invoiceFromSale', () => {
     expect(computeInvoiceTotals(inv).grandTotal).toBe(sale.total);
   });
 
+  it('does not print the price type in item notes', () => {
+    const inv = invoiceFromSale({ sale: { ...sale, items: [{ ...sale.items[0]!, priceTier: 'wholesale' }] }, profile, settings }, 'ar', posAr);
+    expect(inv.items[0]!.note).not.toContain(posAr.receipt.tier);
+  });
+
   it('respects profile flags', () => {
     const inv = invoiceFromSale({ sale, profile: { ...profile, showQr: false, showCashier: false, detail: 'compact' }, settings, cashier: null }, 'ar', posAr);
     expect(inv.qrUrl).toBeUndefined();

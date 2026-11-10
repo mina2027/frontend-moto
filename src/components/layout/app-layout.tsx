@@ -4,6 +4,7 @@ import { Sidebar } from './sidebar';
 import { Header } from './header';
 import { NotificationBar } from './notification-bar';
 import { PageLoading } from '@/components/shared/states';
+import { DeveloperCredit } from '@/components/shared/developer-credit';
 
 export function AppLayout() {
   const { pathname } = useLocation();
@@ -28,6 +29,7 @@ export function AppLayout() {
             <Outlet />
           </React.Suspense>
         </main>
+        <DeveloperCredit className="border-t bg-card px-4 py-2" />
       </div>
     </div>
   );

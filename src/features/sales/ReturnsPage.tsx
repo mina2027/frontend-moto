@@ -14,7 +14,7 @@ import { Money, PageHeader, Section, SearchInput } from '@/components/shared/pag
 import { StatusBadge } from '@/components/shared/status-badge';
 import { NumberStepper } from '@/components/shared/pickers';
 import { ConfirmDialog } from '@/components/shared/confirm-dialog';
-import { salesService } from '@/services';
+import { branchService, salesService } from '@/services';
 import { useAuthStore } from '@/stores/authStore';
 import { useLookups } from '@/hooks/useLookups';
 import { useT } from '@/i18n';
@@ -35,17 +35,22 @@ export default function ReturnsPage() {
   const [notFound, setNotFound] = React.useState(false);
   const [sel, setSel] = React.useState<Record<string, { qty: number; reason: ReturnReason }>>({});
   const [refundMethod, setRefundMethod] = React.useState<PaymentMethod | ''>('');
+  const [drawerId, setDrawerId] = React.useState('');
   const [confirmOpen, setConfirmOpen] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
   const ls = useListState();
   const list = useQuery({ queryKey: ['returns', ls.query], queryFn: () => salesService.returns(ls.query) });
+
+  const drawersQ = useQuery({ queryKey: ['sessions', 'refund', sale?.branchId], queryFn: () => branchService.sessions({ branchId: sale!.branchId, status: 'open', pageSize: 500 }), enabled: !!sale });
+  const drawers = drawersQ.data?.data ?? [];
+  const refundDrawer = drawerId || (drawers.length === 1 ? drawers[0]!.id : '');
 
   const find = React.useCallback(async (num: string) => {
     if (!num.trim()) return;
     setBusy(true);
     const s = await salesService.findByInvoiceNumber(num);
     setBusy(false);
-    setSale(s); setSel({}); setRefundMethod(''); setNotFound(!s);
+    setSale(s); setDrawerId(''); setSel({}); setRefundMethod(''); setNotFound(!s);
   }, []);
   React.useEffect(() => { const inv = params.get('invoice'); if (inv) find(inv); }, [params, find]);
 
@@ -55,9 +60,9 @@ export default function ReturnsPage() {
   const submit = async () => {
     if (!sale) return;
     const items = Object.entries(sel).filter(([, v]) => v.qty > 0).map(([saleItemId, v]) => { const it = sale.items.find((x) => x.id === saleItemId)!; return { saleItemId, productId: it.productId, quantity: v.qty, unitPrice: it.unitPrice, refund: maxRefundFor(sale, it, v.qty), reason: v.reason }; });
-    await salesService.createReturn({ saleId: sale.id, userId: user.id, items, refundMethod: refundMethod || 'credit', settlement: 'debt_first' });
+    await salesService.createReturn({ saleId: sale.id, registerSessionId: refundDrawer || undefined, userId: user.id, items, refundMethod: refundMethod || 'credit', settlement: 'debt_first' });
     toast.success(t('sales.returnDone'));
-    qc.invalidateQueries({ queryKey: ['returns'] }); qc.invalidateQueries({ queryKey: ['sales'] });
+    qc.invalidateQueries({ queryKey: ['returns'] }); qc.invalidateQueries({ queryKey: ['sales'] }); qc.invalidateQueries({ queryKey: ['pos', 'session'] }); qc.invalidateQueries({ queryKey: ['sessions'] });
     setSale(null); setSel({}); setTerm('');
   };
 
@@ -121,7 +126,8 @@ export default function ReturnsPage() {
                     <label className="text-xs text-muted-foreground">{t('sales.refundMethod')}</label>
                     <Select value={refundMethod} onValueChange={(v) => setRefundMethod(v as PaymentMethod)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{(['cash', 'card', 'bank_transfer', 'credit'] as const).map((m) => <SelectItem key={m} value={m}>{t(`sales.methods.${m}`)}</SelectItem>)}</SelectContent></Select>
                   </div>
-                    <Button className="w-full" variant="warning" disabled={selectedCount === 0 || (refund > sale.remaining && (!refundMethod || refundMethod === 'credit'))} onClick={() => setConfirmOpen(true)}><Undo2 /> {t('sales.completeReturn')}</Button>
+                    {refundMethod === 'cash' && refund > sale.remaining ? <Select value={refundDrawer} onValueChange={setDrawerId}><SelectTrigger><SelectValue placeholder={t('expenses.register')} /></SelectTrigger><SelectContent>{drawers.map(drawer => <SelectItem key={drawer.id} value={drawer.id}>{drawer.registerId} / {userName(drawer.userId)}</SelectItem>)}</SelectContent></Select> : null}
+                    <Button className="w-full" variant="warning" disabled={selectedCount === 0 || (refundMethod === 'cash' && refund > sale.remaining && !refundDrawer) || (refund > sale.remaining && (!refundMethod || refundMethod === 'credit'))} onClick={() => setConfirmOpen(true)}><Undo2 /> {t('sales.completeReturn')}</Button>
                   {selectedCount === 0 ? <p className="text-center text-xs text-muted-foreground">{t('sales.selectAtLeastOne')}</p> : null}
                 </div>
               </Section>

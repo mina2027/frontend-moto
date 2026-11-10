@@ -225,6 +225,8 @@ export interface Product {
   partNumber: string;
   brandId: ID;
   categoryId: ID;
+  /** All assigned categories; categoryId remains the primary category for older clients and reports. */
+  categoryIds?: ID[];
   supplierId: ID;
   /** Free-form size/spec, e.g. "90/90-17", "1L", "M". */
   size?: string;
@@ -232,10 +234,14 @@ export interface Product {
   purchasePrice: Money;
   lastPurchaseCost: Money;
   prices: ProductPrices;
+  /** Product-specific discount cap; 0 or a missing legacy value uses the global POS limit. */
+  maxDiscountAmount?: number;
   minStock: number;
   unit: LocalizedText;
   compatibleModelIds: ID[];
   alternativeProductIds: ID[];
+  /** Missing on legacy products; they remain visible in the POS quick panel. */
+  isQuickProduct?: boolean;
   isActive: boolean;
   createdAt: ISODate;
   updatedAt: ISODate;
@@ -447,6 +453,7 @@ export interface SaleReturnItem {
 }
 
 export interface SaleReturn {
+  registerSessionId?: ID | null;
   id: ID;
   returnNumber: string;
   saleId: ID;
@@ -702,6 +709,7 @@ export interface WhatsAppMessage {
 
 // ---------- Audit ----------
 export type AuditAction =
+  | 'expense_status'
   | 'login'
   | 'logout'
   | 'price_change'
@@ -811,12 +819,16 @@ export interface InvoiceSettings {
   footerText: LocalizedText;
   showLogo: boolean;
   showTax: boolean;
+  /** Tax charging is independent of whether its line is printed. Legacy settings infer this from showTax. */
+  taxEnabled?: boolean;
+  /** Server-signed tax configuration captured by offline invoices. */
+  taxSnapshot?: string;
   taxRate: number;
   allowNegativeStock: boolean;
 }
 
 export interface ReceiptSettings {
-  paperWidth: 58 | 80;
+  paperWidth: 80;
   showBarcode: boolean;
   showCashier: boolean;
   showCustomerBalance: boolean;
@@ -843,7 +855,7 @@ export interface PosSettings {
   defaultPaymentMethod: PaymentMethod;
   autoPrint: boolean;
   requireCustomerForCredit: boolean;
-  maxDiscountPercent: number;
+  maxDiscountAmount: number;
   soundOnScan: boolean;
   openDrawerOnSale: boolean;
   defaultPriceTier: PriceTier;
@@ -879,7 +891,7 @@ export interface AlertSettings {
   maxReturnsPerCashierPerDay: number;
   registerVarianceAmount: number;
   /** Invoice-level discount above this percentage is flagged for review. */
-  unusualDiscountPercent: number;
+  unusualDiscountAmount: number;
   maxVoidsPerCashierPerDay: number;
   whatsappManagerPhone: string;
   whatsappOnCritical: boolean;
@@ -900,7 +912,7 @@ export interface AppSettings {
 }
 
 // ---------- Printing ----------
-export type PaperKind = 'thermal80' | 'thermal58' | 'a4' | 'a5';
+export type PaperKind = 'thermal80' | 'a4';
 export type PrintDetail = 'detailed' | 'compact';
 
 export interface PrintProfile {
@@ -1110,6 +1122,8 @@ export interface SyncOp<TPayload = unknown> {
   type: SyncOpType;
   clientCreatedAt: ISODate;
   payload: TPayload;
+  /** Printed amounts, outside the immutable operation payload for legacy outboxes. */
+  saleAmounts?: { tax: number; total: number };
 }
 
 export type SyncOpResultStatus = 'applied' | 'duplicate' | 'rejected';

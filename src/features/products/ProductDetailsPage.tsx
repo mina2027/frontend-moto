@@ -1,27 +1,30 @@
 import * as React from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { Bike, Package, Pencil, Power, PowerOff, Printer, RefreshCw, Replace, Tag } from 'lucide-react';
+import { Bike, Package, Pencil, Power, PowerOff, Printer, RefreshCw, Replace, Tag, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { KeyValue, Money, PageHeader, Section, StatCard } from '@/components/shared/page';
 import { StatusBadge, StockBadge } from '@/components/shared/status-badge';
 import { ErrorState, PageLoading, EmptyState } from '@/components/shared/states';
-import { ConfirmDialog } from '@/components/shared/confirm-dialog';
+import { ConfirmDialog, useConfirm } from '@/components/shared/confirm-dialog';
 import { Barcode } from '@/components/shared/barcode';
 import { Combobox } from '@/components/shared/pickers';
 import { ProductFormDialog } from './ProductFormDialog';
-import { productService, inventoryService, reportService, salesService, purchaseService } from '@/services';
+import { ApiError, productService, inventoryService, reportService, salesService, purchaseService } from '@/services';
 import { useAuthStore } from '@/stores/authStore';
 import { useLookups } from '@/hooks/useLookups';
 import { useSettings } from '@/hooks/useSettings';
 import { useT } from '@/i18n';
+import { productCategoryIds } from '@moto/shared';
 import { formatDate, formatDateTime, formatNumber } from '@/lib/utils';
 
 export default function ProductDetailsPage() {
   const { id = '' } = useParams();
+  const navigate = useNavigate();
+  const { confirm, dialog } = useConfirm();
   const { t, tx, locale } = useT();
   const qc = useQueryClient();
   const hasPermission = useAuthStore((s) => s.hasPermission);
@@ -31,6 +34,7 @@ export default function ProductDetailsPage() {
   const tierLabels = settings.pricing.tierLabels;
   const [editOpen, setEditOpen] = React.useState(false);
   const [toggleOpen, setToggleOpen] = React.useState(false);
+  const [deleting, setDeleting] = React.useState(false);
   const [altPick, setAltPick] = React.useState<string | null>(null);
 
   const q = useQuery({ queryKey: ['product', id], queryFn: () => productService.get(id) });
@@ -44,6 +48,29 @@ export default function ProductDetailsPage() {
   const canEdit = hasPermission('inventory.adjust') || hasPermission('prices.edit');
   const canRegenerate = hasPermission('settings.edit');
 
+  const deleteProduct = async () => {
+    if (!await confirm({ title: t('products.deleteConfirm'), description: t('products.deleteDesc', { name: tx(q.data?.name) }), confirmText: t('products.deleteProduct'), variant: 'destructive' })) return;
+    setDeleting(true);
+    try {
+      await productService.delete(id);
+      toast.success(t('common.deleted'));
+      navigate('/products', { replace: true });
+      qc.setQueryData(['product', id], null);
+      void qc.invalidateQueries({ queryKey: ['product', id], refetchType: 'none' });
+      void qc.invalidateQueries({ queryKey: ['products'] });
+      void qc.invalidateQueries({ queryKey: ['inventory'] });
+      void qc.invalidateQueries({ queryKey: ['dashboard'] });
+      void qc.invalidateQueries({ queryKey: ['audit'] });
+      for (const queryKey of [['pos'], ['quick'], ['specialPrices'], ['customer'], ['warehouse'], ['warehouses'], ['reports']]) void qc.invalidateQueries({ queryKey });
+    } catch (e) {
+      if (e instanceof ApiError && e.code === 'PRODUCT_HAS_STOCK') toast.error(t('products.deleteHasStock'));
+      else if (e instanceof ApiError && e.code === 'PRODUCT_HAS_RESERVATIONS') toast.error(t('products.deleteHasReservations'));
+      else toast.error(e instanceof Error ? e.message : t('products.deleteFailed'));
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   const regenerate = async () => {
     await productService.regenerateBarcode(id);
     toast.success(t('upgrade.barcodeRegenerated'));
@@ -56,7 +83,7 @@ export default function ProductDetailsPage() {
   const p = q.data;
   const purchases = (purchasesQ.data?.data ?? []).filter((x) => x.items.some((i) => i.productId === id));
   const sales = (salesQ.data?.data ?? []).filter((x) => x.status !== 'held' && x.items.some((i) => i.productId === id));
-  const margin = p.prices.retail1 ? ((p.prices.retail1 - p.lastPurchaseCost) / p.prices.retail1) * 100 : 0;
+  const marginFor = (price: number) => price ? ((price - p.lastPurchaseCost) / price) * 100 : 0;
   const soldQty = sales.filter((s) => s.status === 'completed').reduce((a, s) => a + (s.items.find((i) => i.productId === id)?.quantity ?? 0), 0);
 
   return (
@@ -68,13 +95,14 @@ export default function ProductDetailsPage() {
         actions={<>
           <Button variant="outline" asChild><Link to="/products/barcodes" state={{ ids: [p.id] }}><Printer /> {t('barcodes.printLabels')}</Link></Button>
           {canEdit ? <Button variant="outline" onClick={() => setToggleOpen(true)}>{p.isActive ? <PowerOff /> : <Power />} {p.isActive ? t('common.disable') : t('common.enable')}</Button> : null}
+          {canEdit ? <Button variant="destructive" loading={deleting} onClick={deleteProduct}><Trash2 /> {t('products.deleteProduct')}</Button> : null}
           {canEdit ? <Button onClick={() => setEditOpen(true)}><Pencil /> {t('common.edit')}</Button> : null}
         </>}
       />
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard title={t('products.totalStock')} value={p.totalStock} format="number" icon={<Package />} variant={p.stockStatus === 'out' ? 'destructive' : p.stockStatus === 'low' ? 'warning' : 'default'} hint={`${t('products.minStock')}: ${p.minStock}`} />
         <StatCard title={tx(tierLabels.retail1)} value={p.prices.retail1} icon={<Tag />} hint={`${tx(tierLabels.retail2)}: ${formatNumber(p.prices.retail2, 2)} · ${tx(tierLabels.wholesale)}: ${formatNumber(p.prices.wholesale, 2)}`} />
-        {canCost ? <StatCard title={t('products.lastPurchaseCost')} value={p.lastPurchaseCost} icon={<Tag />} variant="info" hint={`${t('products.margin')}: ${margin.toFixed(1)}%`} /> : null}
+        {canCost ? <StatCard title={t('products.lastPurchaseCost')} value={p.lastPurchaseCost} icon={<Tag />} variant="info" hint={`${t('products.margin')}: ${tx(tierLabels.retail1)} ${marginFor(p.prices.retail1).toFixed(1)}% · ${tx(tierLabels.retail2)} ${marginFor(p.prices.retail2).toFixed(1)}% · ${tx(tierLabels.wholesale)} ${marginFor(p.prices.wholesale).toFixed(1)}%`} /> : null}
         <StatCard title={t('dashboard.qtySold')} value={soldQty} format="number" icon={<Tag />} variant="success" />
       </div>
 
@@ -96,7 +124,7 @@ export default function ProductDetailsPage() {
               <KeyValue cols={3} items={[
                 { label: t('products.nameAr'), value: p.name.ar }, { label: t('products.nameEn'), value: p.name.en }, { label: t('common.unit'), value: tx(p.unit) },
                 { label: t('common.barcode'), value: <span className="num">{p.internalBarcode}</span> }, { label: t('upgrade.legacyBarcode'), value: p.legacyBarcode ? <span className="num text-xs text-muted-foreground">{p.legacyBarcode}</span> : '—' }, { label: t('products.sku'), value: <span className="num">{p.sku}</span> },
-                { label: t('products.partNumber'), value: <span className="num">{p.partNumber}</span> }, { label: t('products.brand'), value: brandName(p.brandId) }, { label: t('products.category'), value: categoryName(p.categoryId) },
+                { label: t('products.partNumber'), value: <span className="num">{p.partNumber}</span> }, { label: t('products.brand'), value: brandName(p.brandId) }, { label: t('products.categories'), value: productCategoryIds(p).map(categoryName).join('، ') },
                 { label: t('products.size'), value: p.size ? <span className="num">{p.size}</span> : '—' },
                 { label: t('products.supplier'), value: p.supplierId ? <Link to={`/suppliers/${p.supplierId}`} className="text-primary hover:underline">{supplierName(p.supplierId)}</Link> : '—' }, { label: t('common.createdAt'), value: formatDate(p.createdAt, locale) }, { label: t('common.updatedAt'), value: formatDate(p.updatedAt, locale) },
               ]} />
@@ -104,7 +132,8 @@ export default function ProductDetailsPage() {
                 <h4 className="mb-2 text-xs font-semibold text-muted-foreground">{t('common.pricing')}</h4>
                 <KeyValue cols={4} items={[
                   ...(canCost ? [{ label: t('products.purchasePrice'), value: <Money value={p.purchasePrice} /> }, { label: t('products.lastPurchaseCost'), value: <Money value={p.lastPurchaseCost} /> }] : []),
-                  { label: tx(tierLabels.retail1), value: <Money value={p.prices.retail1} className="font-semibold" /> }, { label: tx(tierLabels.retail2), value: <Money value={p.prices.retail2} /> }, { label: tx(tierLabels.wholesale), value: <Money value={p.prices.wholesale} /> },
+                  { label: tx(tierLabels.retail1), value: <><Money value={p.prices.retail1} className="font-semibold" /> <span className="text-xs text-muted-foreground">({marginFor(p.prices.retail1).toFixed(1)}%)</span></> }, { label: tx(tierLabels.retail2), value: <><Money value={p.prices.retail2} /> <span className="text-xs text-muted-foreground">({marginFor(p.prices.retail2).toFixed(1)}%)</span></> }, { label: tx(tierLabels.wholesale), value: <><Money value={p.prices.wholesale} /> <span className="text-xs text-muted-foreground">({marginFor(p.prices.wholesale).toFixed(1)}%)</span></> },
+                  { label: t('products.maxDiscountAmount'), value: <Money value={p.maxDiscountAmount ?? 0} /> },
                 ]} />
               </div>
             </Section>
@@ -165,6 +194,7 @@ export default function ProductDetailsPage() {
       </Tabs>
 
       <ProductFormDialog open={editOpen} onOpenChange={setEditOpen} product={p} onSaved={() => { q.refetch(); prices.refetch(); }} />
+      {dialog}
       <ConfirmDialog open={toggleOpen} onOpenChange={setToggleOpen} title={p.isActive ? t('products.deactivateConfirm') : t('common.enable')} description={p.isActive ? t('products.deactivateDesc') : undefined} variant={p.isActive ? 'warning' : 'success'} onConfirm={async () => { await productService.update(p.id, { isActive: !p.isActive }, actor.id); toast.success(t('common.updated')); q.refetch(); qc.invalidateQueries({ queryKey: ['products'] }); }} />
     </div>
   );

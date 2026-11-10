@@ -19,7 +19,8 @@ import { useT } from '@/i18n';
 import { cn } from '@/lib/utils';
 import { LABEL_PRESETS, PRICE_TIERS, defaultLabelElements, defaultLabelTemplate } from '@moto/shared';
 import type { LabelElement, LabelElementType, LabelTemplate, PriceTier } from '@/types';
-import { LabelRenderer, labelPageStyle } from './LabelRenderer';
+import { LabelRenderer } from './LabelRenderer';
+import { printBrowserLabels } from './labelPrint';
 
 const ELEMENT_TYPES: LabelElementType[] = ['companyName', 'logo', 'productName', 'price', 'barcode', 'sku', 'partNumber', 'location', 'customText'];
 const clamp = (v: number, min: number, max: number) => Math.min(max, Math.max(min, v));
@@ -30,7 +31,7 @@ export default function LabelDesignerPage() {
   const qc = useQueryClient();
   const canEdit = useAuthStore((s) => s.hasPermission('settings.edit') || s.hasPermission('inventory.adjust'));
   const branchId = useAuthStore((s) => s.session!.user.branchId);
-  const { settings } = useSettings();
+  const { settings, isLoading: settingsLoading } = useSettings();
   const { options } = useLookups();
   const templatesQ = useQuery({ queryKey: ['labelTemplates', branchId], queryFn: () => settingsService.labelTemplates(branchId) });
   const products = useQuery({ queryKey: ['products', 'all'], queryFn: () => productService.all() });
@@ -42,6 +43,8 @@ export default function LabelDesignerPage() {
   const [deleteOpen, setDeleteOpen] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
   const [dirty, setDirty] = React.useState(false);
+  const printRef = React.useRef<HTMLDivElement>(null);
+  const [printing, setPrinting] = React.useState(false);
   const sample = products.data?.find((p) => p.id === sampleId) ?? products.data?.[0];
   const sampleLevels = useQuery({ queryKey: ['product', sample?.id, 'levels'], queryFn: () => productService.stockLevels(sample!.id), enabled: Boolean(sample) });
   const sampleLocation = React.useMemo(() => {
@@ -99,7 +102,17 @@ export default function LabelDesignerPage() {
     toast.success(t('common.deleted'));
     newTemplate();
   };
-  const printTest = () => setTimeout(() => window.print(), 150);
+  const printTest = async () => {
+    if (printing) return;
+    setPrinting(true);
+    try {
+      await printBrowserLabels(printRef.current, draft);
+    } catch {
+      toast.error(t('barcodes.printFailed'));
+    } finally {
+      setPrinting(false);
+    }
+  };
 
   const elementLabel = (type: LabelElementType) => t(`upgrade.element.${type}`);
 
@@ -111,7 +124,7 @@ export default function LabelDesignerPage() {
         backTo="/products/barcodes"
         actions={
           <>
-            <Button variant="outline" onClick={printTest} disabled={!sample}><Printer /> {t('common.print')}</Button>
+            <Button variant="outline" onClick={() => void printTest()} disabled={!sample || settingsLoading || templatesQ.isPending} loading={printing}><Printer /> {t('common.print')}</Button>
             {canEdit ? <Button onClick={save} loading={saving} disabled={!dirty && Boolean(draft.id)}><Save /> {t('upgrade.saveTemplate')}</Button> : null}
           </>
         }
@@ -170,8 +183,7 @@ export default function LabelDesignerPage() {
           </div>
           <div className="mt-2 text-[11px] text-muted-foreground">{t('upgrade.dragToReorder')} · mm</div>
           {sample ? (
-            <div className="print-area hidden print:block">
-              <style>{labelPageStyle(draft)}</style>
+            <div ref={printRef} className="hidden" aria-hidden="true">
               <div className="label-page"><LabelRenderer template={draft} product={sample} settings={settings} location={sampleLocation} /></div>
             </div>
           ) : null}

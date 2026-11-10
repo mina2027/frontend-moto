@@ -1,23 +1,18 @@
 import * as React from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { InvoiceDocument, PosLocaleContext, pageStyleFor } from '@moto/pos-core';
-import { defaultPrintProfiles } from '@moto/shared';
+import { InvoiceDocument, PosLocaleContext, pageStyleFor, checkoutProfileForSize, type InvoiceSize } from '@moto/pos-core';
 import type { PrintProfile, Sale } from '@/types';
-import { devicePrintPref, settingsService } from '@/services';
 import { useLookups } from '@/hooks/useLookups';
 import { useSettings } from '@/hooks/useSettings';
 import { useUiStore } from '@/stores/uiStore';
 
 const PUBLIC_URL = (import.meta.env.VITE_PUBLIC_URL as string | undefined) || (typeof window !== 'undefined' ? window.location.origin : '');
 
-/** Renders a sale with the device/default print profile (or an explicit one). Wrap in `.print-area` to print. */
-export const Receipt = React.forwardRef<HTMLDivElement, { sale: Sale; profile?: PrintProfile | null; profileId?: string | null }>(function Receipt({ sale, profile, profileId }, ref) {
+/** Invoice size is explicit; profile overrides are used only by the settings preview. */
+export const Receipt = React.forwardRef<HTMLDivElement, { sale: Sale; size?: InvoiceSize; profile?: PrintProfile | null }>(function Receipt({ sale, size = 'small', profile }, ref) {
   const locale = useUiStore((s) => s.locale);
   const { settings } = useSettings();
   const { branches, users, customers, products, models } = useLookups();
-  const profilesQ = useQuery({ queryKey: ['printProfiles', sale.branchId], queryFn: () => settingsService.printProfiles(sale.branchId), staleTime: 300_000 });
-  const list = profilesQ.data ?? defaultPrintProfiles();
-  const chosen = profile ?? list.find((x) => x.id === (profileId ?? devicePrintPref.get())) ?? list.find((x) => x.isDefault) ?? list[0]!;
+  const chosen = profile ?? checkoutProfileForSize(size);
   return (
     <PosLocaleContext.Provider value={locale}>
       <style>{pageStyleFor(chosen)}</style>

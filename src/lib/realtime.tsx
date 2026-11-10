@@ -26,8 +26,12 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
     socketRef.current = socket;
     const inv = (...keys: string[][]) => keys.forEach((k) => qc.invalidateQueries({ queryKey: k }));
 
-    socket.on(SOCKET_EVENTS.saleCreated, () => inv(['pos', 'session'], ['pos', 'quick'], ['sales'], ['sale'], ['returns'], ['dashboard'], ['sessions'], ['session'], ['registers'], ['products'], ['product'], ['reports'], ['report'], ['accounting']));
-    socket.on(SOCKET_EVENTS.stockChanged, () => inv(['pos', 'quick'], ['pos', 'alternatives'], ['products'], ['product'], ['inventory'], ['movements'], ['warehouse'], ['warehouses'], ['transfers'], ['transfer'], ['dashboard']));
+    // Events sent while disconnected are not replayed by Socket.IO.
+    socket.on('connect', () => inv(['pos', 'catalog'], ['pos', 'catalogMeta'], ['products'], ['product'], ['categories']));
+
+    socket.on(SOCKET_EVENTS.saleCreated, () => inv(['pos', 'session'], ['pos', 'catalog'], ['pos', 'recentSales'], ['pos', 'quick'], ['sales'], ['sale'], ['returns'], ['dashboard'], ['sessions'], ['session'], ['registers'], ['products'], ['product'], ['reports'], ['report'], ['accounting']));
+    socket.on(SOCKET_EVENTS.stockChanged, () => inv(['pos', 'catalog'], ['pos', 'quick'], ['pos', 'alternatives'], ['products'], ['product'], ['inventory'], ['movements'], ['warehouse'], ['warehouses'], ['transfers'], ['transfer'], ['dashboard']));
+    socket.on(SOCKET_EVENTS.productsChanged, () => inv(['pos'], ['products'], ['product'], ['categories'], ['inventory'], ['warehouse'], ['warehouses'], ['quick'], ['specialPrices'], ['customer'], ['dashboard'], ['reports'], ['audit']));
     socket.on(SOCKET_EVENTS.debtChanged, () => inv(['pos', 'customers'], ['debts'], ['customers'], ['customer'], ['dashboard']));
     socket.on(SOCKET_EVENTS.quickProductsChanged, () => inv(['pos', 'quick'], ['quick']));
     socket.on(SOCKET_EVENTS.settingsChanged, () => inv(['pos', 'settings'], ['pos', 'printProfiles'], ['settings'], ['printProfiles'], ['labelTemplates']));

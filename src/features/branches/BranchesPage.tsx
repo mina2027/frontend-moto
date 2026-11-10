@@ -49,7 +49,7 @@ export default function BranchesPage() {
   const { t, tx } = useT();
   const navigate = useNavigate();
   const canEdit = useAuthStore((s) => s.hasPermission('branches.edit'));
-  const canFinancial = useAuthStore((s) => s.hasPermission('reports.financial'));
+  const canFinancial = useAuthStore((s) => s.hasPermission('reports.financial') && s.hasPermission('prices.view_cost'));
   const { userName } = useLookups();
   const [addOpen, setAddOpen] = React.useState(false);
   const perf = useQuery({ queryKey: ['branches', 'performance'], queryFn: branchService.performance });
@@ -78,7 +78,7 @@ export default function BranchesPage() {
           </div>
           <div className="mt-4 grid gap-3 lg:grid-cols-2">
             <ChartCard title={`${t('branches.comparison')} — ${t('branches.sales')}`}><NamedBarChart data={(perf.data ?? []).filter((p) => p.branch.isActive).map((p) => ({ name: p.branch.name, value: p.revenue }))} height={240} /></ChartCard>
-            {canFinancial ? <ChartCard title={`${t('branches.comparison')} — ${t('common.profit')}`}><NamedBarChart data={(perf.data ?? []).filter((p) => p.branch.isActive).map((p) => ({ name: p.branch.name, value: p.net }))} height={240} color="#16a34a" /></ChartCard> : <ChartCard title={`${t('branches.comparison')} — ${t('branches.inventory')}`}><NamedBarChart data={(perf.data ?? []).filter((p) => p.branch.isActive).map((p) => ({ name: p.branch.name, value: p.inventory }))} height={240} color="#0891b2" /></ChartCard>}
+            {canFinancial ? <ChartCard title={`${t('branches.comparison')} — ${t('common.profit')}`}><NamedBarChart data={(perf.data ?? []).filter((p) => p.branch.isActive).map((p) => ({ name: p.branch.name, value: p.net }))} height={240} color="#16a34a" /></ChartCard> : <ChartCard title={`${t('branches.comparison')} — ${t('dashboard.invoices')}`}><NamedBarChart data={(perf.data ?? []).filter((p) => p.branch.isActive).map((p) => ({ name: p.branch.name, value: p.invoices }))} height={240} color="#0891b2" /></ChartCard>}
           </div>
         </>
       )}

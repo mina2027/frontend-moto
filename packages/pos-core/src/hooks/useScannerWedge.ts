@@ -14,6 +14,11 @@ export function useScannerWedge(onScan: (code: string) => void, opts: { minLengt
   React.useEffect(() => {
     if (!enabled) return;
     const onKey = (e: KeyboardEvent) => {
+      if (e.target instanceof Element && e.target.closest('[data-scanner-ignore]')) {
+        buf.current = '';
+        last.current = 0;
+        return;
+      }
       const now = performance.now();
       if (now - last.current > maxGapMs) buf.current = '';
       last.current = now;

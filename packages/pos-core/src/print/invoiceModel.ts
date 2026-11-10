@@ -40,6 +40,7 @@ export interface Invoice {
   /** Amount tendered by the customer. */
   paid: number;
   paymentMethod: string;
+  notes?: string;
   /** Omit to hide the QR code. */
   qrUrl?: string;
   showBarcode?: boolean;
@@ -171,7 +172,6 @@ export function invoiceFromSale(ctx: PrintContext, locale: Locale, p: PosTransla
     const notes: string[] = [];
     if (detailed && profile.showPartNumber && it.partNumber) notes.push(`${p.receipt.partNumber}: ${it.partNumber}`);
     if (detailed && profile.showCompatibility && fits(it.productId)) notes.push(`${p.receipt.fits}: ${fits(it.productId)}`);
-    if (detailed && it.priceTier !== 'retail1') notes.push(`${p.receipt.tier}: ${tierLabel(settings, it.priceTier, p, locale)}`);
     return { name: t(it.name), sku: it.barcode || it.sku, qty: it.quantity, unitPrice: it.unitPrice, discount: it.discount, note: notes.join(' · ') || undefined };
   });
   const invoiceDiscount = sale.invoiceDiscount;
@@ -184,7 +184,7 @@ export function invoiceFromSale(ctx: PrintContext, locale: Locale, p: PosTransla
   return {
     number: sale.invoiceNumber,
     issuedAt: sale.date,
-    branch: branch ? t(branch.name) : '—',
+    branch: t(branch?.name).trim() || ctx.branchName?.trim() || '—',
     cashier: profile.showCashier && cashier ? t(cashier.fullName) : undefined,
     terminal: ctx.terminalCode || undefined,
     customer: {
@@ -198,6 +198,7 @@ export function invoiceFromSale(ctx: PrintContext, locale: Locale, p: PosTransla
     taxRate,
     paid: round2(sale.paid + sale.change),
     paymentMethod: methods.map((m: PaymentMethod) => p[m]).join(' + '),
+    notes: sale.notes?.trim() || undefined,
     qrUrl: profile.showQr ? (sale.qrPayload ?? `${ctx.verifyBaseUrl ?? ''}/v/${encodeURIComponent(sale.invoiceNumber)}`) : undefined,
     showBarcode: settings.receipt.showBarcode,
     reviewed: profile.showReviewStamp,

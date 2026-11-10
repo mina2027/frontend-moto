@@ -20,8 +20,9 @@ import { useLookups } from '@/hooks/useLookups';
 import { useT } from '@/i18n';
 import { formatDateTime, matchSearch, paginate } from '@/lib/utils';
 import { columnsToExport } from '@/lib/tableExport';
+import { productCategoryIds } from '@moto/shared';
 
-type Row = InventoryRow & { name: string; sku: string; categoryId: string; cost: number };
+type Row = InventoryRow & { name: string; sku: string; categoryId: string; categoryIds: string[]; cost: number };
 
 export default function InventoryPage() {
   const { t, tx, locale } = useT();
@@ -63,7 +64,7 @@ export default function InventoryPage() {
 
   const rows = React.useMemo<Row[]>(() => {
     const pm = new Map((products.data ?? []).map((p) => [p.id, p]));
-    return (ov.data?.rows ?? []).map((r) => { const p = pm.get(r.productId); return { ...r, name: tx(p?.name), sku: p?.sku ?? '', categoryId: p?.categoryId ?? '', cost: p?.lastPurchaseCost ?? 0 }; });
+    return (ov.data?.rows ?? []).map((r) => { const p = pm.get(r.productId); return { ...r, name: tx(p?.name), sku: p?.sku ?? '', categoryId: p?.categoryId ?? '', categoryIds: productCategoryIds(p), cost: p?.lastPurchaseCost ?? 0 }; });
   }, [ov.data, products.data, tx]);
   const filtered = React.useMemo(() => {
     let r = rows.filter((x) => matchSearch([x.name, x.sku], search));
@@ -77,7 +78,7 @@ export default function InventoryPage() {
   React.useEffect(() => setPage(1), [search, tab, branchId, warehouseId]);
 
   const baseCols: ColumnDef<Row, unknown>[] = [
-    { accessorKey: 'name', header: t('common.product'), cell: ({ row }) => <div><Link to={`/products/${row.original.productId}`} className="font-medium hover:underline">{row.original.name}</Link><div className="text-[10px] text-muted-foreground">{row.original.sku} · {categoryName(row.original.categoryId)}</div></div> },
+    { accessorKey: 'name', header: t('common.product'), cell: ({ row }) => <div><Link to={`/products/${row.original.productId}`} className="font-medium hover:underline">{row.original.name}</Link><div className="text-[10px] text-muted-foreground">{row.original.sku} · {row.original.categoryIds.map(categoryName).join('، ')}</div></div> },
     { accessorKey: 'quantity', header: t('common.quantity'), cell: ({ row }) => <span className="num font-semibold">{row.original.quantity}</span>, meta: { align: 'end' } },
     { accessorKey: 'reserved', header: t('inventory.reserved'), cell: ({ row }) => <span className="num text-muted-foreground">{row.original.reserved || '—'}</span>, meta: { align: 'end' } },
     { accessorKey: 'minStock', header: t('products.minStock'), cell: ({ row }) => <span className="num text-muted-foreground">{row.original.minStock}</span>, meta: { align: 'end' } },

@@ -1,4 +1,5 @@
 import type { Category, PriceTier } from '@moto/shared';
+import { productCategoryIds } from '@moto/shared';
 import type { PosProduct } from './adapter';
 
 export type StockFilter = 'all' | 'in' | 'low' | 'out';
@@ -56,7 +57,7 @@ export function filterCatalog(products: PosProduct[], f: CatalogFilters, opts: {
   const tier = opts.tier ?? 'retail1';
   const out = products.filter((p) => {
     if (p.isActive === false) return false;
-    if (cats && !cats.has(p.categoryId)) return false;
+    if (cats && !productCategoryIds(p).some(id => cats.has(id))) return false;
     if (f.brandId && p.brandId !== f.brandId) return false;
     if (f.modelId && !(p.compatibleModelIds ?? []).includes(f.modelId)) return false;
     if (f.stock !== 'all' && stockStateOf(p) !== f.stock) return false;

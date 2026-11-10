@@ -24,6 +24,7 @@ import { columnsToExport } from '@/lib/tableExport';
 import { cn, formatDate, formatDateTime, round2 } from '@/lib/utils';
 import type { PriceHistoryEntry, ProductUpdateInput, SpecialPrice } from '@/types';
 import { bulkPriceTargets } from './bulkPrices';
+import { productCategoryIds } from '@moto/shared';
 
 type Field = 'retail1' | 'retail2' | 'wholesale' | 'purchasePrice';
 const FIELDS: Field[] = ['purchasePrice', 'retail1', 'retail2', 'wholesale'];
@@ -82,12 +83,12 @@ export default function PricingPage() {
   };
 
   const columns = React.useMemo<ColumnDef<ProductWithStock, unknown>[]>(() => [
-    { id: 'name', header: t('common.product'), cell: ({ row }) => <div><Link to={`/products/${row.original.id}`} className="font-medium hover:underline">{tx(row.original.name)}</Link><div className="text-[10px] text-muted-foreground">{row.original.sku} · {brandName(row.original.brandId)} · {categoryName(row.original.categoryId)}</div></div> },
+    { id: 'name', header: t('common.product'), cell: ({ row }) => <div><Link to={`/products/${row.original.id}`} className="font-medium hover:underline">{tx(row.original.name)}</Link><div className="text-[10px] text-muted-foreground">{row.original.sku} · {brandName(row.original.brandId)} · {productCategoryIds(row.original).map(categoryName).join('، ')}</div></div> },
     ...(canCost ? [{ accessorKey: 'lastPurchaseCost', header: t('products.lastPurchaseCost'), cell: ({ row }: { row: { original: ProductWithStock } }) => <Money value={row.original.lastPurchaseCost} className="text-muted-foreground" />, meta: { align: 'end' as const } }, { accessorKey: 'purchasePrice', header: t('products.purchasePrice'), cell: ({ row }: { row: { original: ProductWithStock } }) => cell(row.original, 'purchasePrice'), meta: { align: 'end' as const } }] : []),
     { id: 'retail1', accessorFn: (p) => p.prices.retail1, header: tx(tierLabels.retail1), cell: ({ row }) => cell(row.original, 'retail1'), meta: { align: 'end' } },
     { id: 'retail2', accessorFn: (p) => p.prices.retail2, header: tx(tierLabels.retail2), cell: ({ row }) => cell(row.original, 'retail2'), meta: { align: 'end' } },
     { id: 'wholesale', accessorFn: (p) => p.prices.wholesale, header: tx(tierLabels.wholesale), cell: ({ row }) => cell(row.original, 'wholesale'), meta: { align: 'end' } },
-    ...(canCost ? [{ id: 'margin', header: t('products.margin'), cell: ({ row }: { row: { original: ProductWithStock } }) => { const r = row.original.prices.retail1; const m = r ? ((r - row.original.lastPurchaseCost) / r) * 100 : 0; return <span className={cn('num text-xs font-medium', m < 10 ? 'text-destructive' : m < 20 ? 'text-amber-600' : 'text-success')}>{m.toFixed(1)}%</span>; }, meta: { align: 'end' as const } }] : []),
+    ...(canCost ? (['retail1', 'retail2', 'wholesale'] as const).map((tier) => ({ id: `${tier}Margin`, header: `${t('products.margin')} ${tx(tierLabels[tier])}`, cell: ({ row }: { row: { original: ProductWithStock } }) => { const price = row.original.prices[tier]; const m = price ? ((price - row.original.lastPurchaseCost) / price) * 100 : 0; return <span className={cn('num text-xs font-medium', m < 10 ? 'text-destructive' : m < 20 ? 'text-amber-600' : 'text-success')}>{m.toFixed(1)}%</span>; }, meta: { align: 'end' as const } })) : []),
     { id: 'updated', header: t('common.updatedAt'), cell: ({ row }) => <span className="num text-xs text-muted-foreground">{formatDate(row.original.updatedAt, locale)}</span> },
   ], [t, tx, brandName, categoryName, canCost, canEdit, editing, locale, tierLabels]);  
 

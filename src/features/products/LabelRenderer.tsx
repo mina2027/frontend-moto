@@ -9,7 +9,7 @@ export interface LabelRendererProps {
   template: LabelTemplate;
   product: Product;
   settings: AppSettings;
-  /** Pixels per mm. Default = template.dpi / 25.4 (1:1 for the printer). */
+  /** Preview pixels per mm. Omit for physical mm dimensions when printing. */
   scale?: number;
   className?: string;
   selectedId?: string | null;
@@ -25,8 +25,10 @@ export interface LabelRendererProps {
 /** Renders one label at exact mm dimensions. Interactive mode enables drag/resize for the designer. */
 export function LabelRenderer({ template, product, settings, scale, className, selectedId, onSelect, onMove, onResize, interactive, showGrid, location }: LabelRendererProps) {
   const { tx, locale } = useT();
-  const pxPerMm = scale ?? mmToPx(1, template.dpi);
+  // Browsers use 96 CSS px/inch regardless of the printer's hardware DPI.
+  const pxPerMm = scale ?? mmToPx(1, 96);
   const px = (mm: number) => mm * pxPerMm;
+  const dimension = (mm: number) => scale == null ? `${mm}mm` : px(mm);
   const drag = React.useRef<{ id: string; mode: 'move' | 'resize'; x: number; y: number } | null>(null);
 
   const onPointerDown = (e: React.PointerEvent, id: string, mode: 'move' | 'resize') => {
@@ -72,7 +74,7 @@ export function LabelRenderer({ template, product, settings, scale, className, s
   return (
     <div
       className={cn('relative overflow-hidden bg-white text-black', className)}
-      style={{ width: px(template.widthMm), height: px(template.heightMm), backgroundImage: showGrid ? `linear-gradient(to right, #eee 1px, transparent 1px), linear-gradient(to bottom, #eee 1px, transparent 1px)` : undefined, backgroundSize: showGrid ? `${px(1)}px ${px(1)}px` : undefined }}
+      style={{ width: dimension(template.widthMm), height: dimension(template.heightMm), backgroundImage: showGrid ? `linear-gradient(to right, #eee 1px, transparent 1px), linear-gradient(to bottom, #eee 1px, transparent 1px)` : undefined, backgroundSize: showGrid ? `${px(1)}px ${px(1)}px` : undefined }}
       dir="ltr"
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
@@ -84,11 +86,11 @@ export function LabelRenderer({ template, product, settings, scale, className, s
           const selected = selectedId === el.id;
           const style: React.CSSProperties = {
             position: 'absolute',
-            left: px(el.x),
-            top: px(el.y),
-            width: px(el.w),
-            height: px(el.h),
-            fontSize: px(el.fontSize * 0.3528),
+            left: dimension(el.x),
+            top: dimension(el.y),
+            width: dimension(el.w),
+            height: dimension(el.h),
+            fontSize: scale == null ? `${el.fontSize}pt` : px(el.fontSize * 0.3528),
             fontWeight: el.fontWeight,
             textAlign: el.align === 'start' ? 'left' : el.align === 'end' ? 'right' : 'center',
             lineHeight: 1.1,
@@ -124,5 +126,13 @@ export function LabelRenderer({ template, product, settings, scale, className, s
 
 /** Styles for exact-size label printing (one label per page). */
 export function labelPageStyle(t: LabelTemplate) {
-  return `@page { size: ${t.widthMm}mm ${t.heightMm}mm; margin: 0; } @media print { html, body { margin: 0; } .label-page { page-break-after: always; break-after: page; } .label-page:last-child { page-break-after: auto; } }`;
+  return `@page { size: ${t.widthMm}mm ${t.heightMm}mm; margin: 0; }
+    @media print {
+      html, body { width: ${t.widthMm}mm !important; height: auto !important; margin: 0 !important; padding: 0 !important; overflow: visible !important; background: white !important; }
+      body > :not(.barcode-print-document) { display: none !important; }
+      .barcode-print-document, .barcode-print-document * { visibility: visible !important; }
+      .barcode-print-document { position: static !important; display: block !important; width: ${t.widthMm}mm !important; height: auto !important; margin: 0; padding: 0; overflow: visible !important; }
+      .barcode-print-document .label-page { display: block; width: ${t.widthMm}mm; height: ${t.heightMm}mm; margin: 0; padding: 0; overflow: hidden; break-inside: avoid; page-break-inside: avoid; break-after: page; page-break-after: always; }
+      .barcode-print-document .label-page:last-child { break-after: auto; page-break-after: auto; }
+    }`;
 }

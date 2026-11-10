@@ -1,7 +1,7 @@
 import type {
-  AlternativeSuggestion, AppSettings, Brand, CashMovementType, Category, Customer, ID, Locale, MotorcycleModel, PaymentMethod, Permission, PrintProfile, Product, QuickCategory, QuickProduct, RegisterSession, Sale, SaleReturn, SpecialPrice, User,
+  AlternativeSuggestion, AppSettings, Brand, Category, CashMovementType, Customer, ID, ListQuery, Locale, MotorcycleModel, Paginated, PaymentMethod, Permission, PrintProfile, Product, RegisterSession, Sale, SaleReturn, SpecialPrice, User,
 } from '@moto/shared';
-import type { SaleCreateInput, CustomerSaveInput, QuickProductSaveInput, SaleReturnCreateInput } from '@moto/shared';
+import type { SaleCreateInput, CustomerSaveInput, SaleReturnCreateInput } from '@moto/shared';
 import type { PrintOutcome } from '@moto/shared';
 
 export interface PosProduct extends Product {
@@ -9,12 +9,6 @@ export interface PosProduct extends Product {
   available: number;
   /** "rack · shelf · bin" in this branch, shown so the cashier can fetch the part. */
   location?: string;
-}
-
-export interface CatalogMeta {
-  categories: Category[];
-  brands: Brand[];
-  models: MotorcycleModel[];
 }
 
 export interface ConnectivityState {
@@ -45,12 +39,9 @@ export interface PosAdapter {
   customers(): Promise<Customer[]>;
   createCustomer(input: CustomerSaveInput): Promise<Customer>;
   specialPrices(): Promise<SpecialPrice[]>;
-  quickGrid(): Promise<{ products: QuickProduct[]; categories: QuickCategory[]; catalog: PosProduct[] }>;
-  /** Lookup lists used by the product filter (categories, brands, motorcycle models). */
-  catalogMeta?(): Promise<CatalogMeta>;
-  saveQuickProduct(input: QuickProductSaveInput): Promise<QuickProduct>;
-  deleteQuickProduct(id: ID): Promise<void>;
-  reorderQuick(ids: ID[]): Promise<void>;
+  /** Active branch products with available stock and shelf locations. */
+  catalog(): Promise<PosProduct[]>;
+  catalogMeta?(): Promise<{ categories: Category[]; brands: Brand[]; models: MotorcycleModel[] }>;
   currentSession(): Promise<RegisterSession | null>;
   /** Persists the sale (locally first on desktop). Returns the sale with its invoice number. */
   createSale(input: SaleCreateInput): Promise<Sale>;
@@ -58,6 +49,8 @@ export interface PosAdapter {
   /** Invoice lookup for the returns flow; desktop reads the terminal's own cache. */
   saleByInvoice?(invoiceNumber: string): Promise<Sale | null>;
   recentSales?(limit?: number): Promise<Sale[]>;
+  /** Searches all saved invoices before paging the results. */
+  salesHistory?(query: Pick<ListQuery, 'page' | 'pageSize' | 'search'>): Promise<Paginated<Sale>>;
   createSaleReturn?(input: SaleReturnCreateInput): Promise<SaleReturn>;
   /** Cash in / out / expense against the open drawer. */
   cashMovement?(input: { type: CashMovementType; amount: number; notes?: string }): Promise<RegisterSession>;
@@ -65,12 +58,8 @@ export interface PosAdapter {
   /** Branch id → display name, for stock held in other branches. */
   branchName?(id: ID): string;
   alternatives(productId: ID): Promise<AlternativeSuggestion[]>;
-  printProfiles(): Promise<PrintProfile[]>;
-  getDevicePrintProfile(): string | null;
-  setDevicePrintProfile(id: string | null): void;
   /** Platform print: web → window.print(); desktop → Windows printer dialog. */
   print(target: HTMLElement | null, profile: PrintProfile | null): Promise<void | PrintOutcome>;
-  invoiceProfile?(size: 'small' | 'large'): Promise<PrintProfile>;
   openDrawer?(): Promise<void>;
   openCustomerDisplay?(): Promise<void>;
   requestTransfer?(productId: ID, fromBranchId: ID, qty: number): Promise<void>;

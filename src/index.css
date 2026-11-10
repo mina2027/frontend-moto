@@ -132,6 +132,11 @@
 
 body.moto-pos-mode { user-select: none; font-feature-settings: 'tnum'; }
 body.moto-pos-mode input, body.moto-pos-mode textarea { user-select: text; }
+/* The terminal uses the same native scrollbars as the desktop renderer. */
+body.moto-pos-mode ::-webkit-scrollbar { width: auto; height: auto; }
+body.moto-pos-mode ::-webkit-scrollbar-track,
+body.moto-pos-mode ::-webkit-scrollbar-thumb,
+body.moto-pos-mode ::-webkit-scrollbar-thumb:hover { all: revert; }
 @media screen {
   body.moto-pos-mode .text-\[9px\] { font-size: calc(9px * var(--ui-font-scale, 1)); }
   body.moto-pos-mode .text-\[10px\] { font-size: calc(10px * var(--ui-font-scale, 1)); }
