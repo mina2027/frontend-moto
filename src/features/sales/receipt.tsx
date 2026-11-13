@@ -11,7 +11,7 @@ const PUBLIC_URL = (import.meta.env.VITE_PUBLIC_URL as string | undefined) || (t
 export const Receipt = React.forwardRef<HTMLDivElement, { sale: Sale; size?: InvoiceSize; profile?: PrintProfile | null }>(function Receipt({ sale, size = 'small', profile }, ref) {
   const locale = useUiStore((s) => s.locale);
   const { settings } = useSettings();
-  const { branches, users, customers, products, models } = useLookups();
+  const { branches, users, customers, products, models, brands, categories } = useLookups();
   const chosen = profile ?? checkoutProfileForSize(size);
   return (
     <PosLocaleContext.Provider value={locale}>
@@ -25,6 +25,8 @@ export const Receipt = React.forwardRef<HTMLDivElement, { sale: Sale; size?: Inv
         cashier={users.find((u) => u.id === sale.cashierId) ?? null}
         customer={customers.find((c) => c.id === sale.customerId) ?? null}
         products={Object.fromEntries(products.map((p) => [p.id, p]))}
+        brands={Object.fromEntries(brands.map((b) => [b.id, b]))}
+        categories={Object.fromEntries(categories.map((c) => [c.id, c]))}
         models={Object.fromEntries(models.map((m) => [m.id, m]))}
         verifyBaseUrl={PUBLIC_URL}
       />

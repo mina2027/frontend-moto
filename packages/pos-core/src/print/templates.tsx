@@ -1,5 +1,5 @@
 import * as React from 'react';
-import type { AppSettings, Branch, Customer, MotorcycleModel, PrintProfile, Product, Sale, User } from '@moto/shared';
+import type { AppSettings, Branch, Brand, Category, Customer, MotorcycleModel, PrintProfile, Product, Sale, User } from '@moto/shared';
 import { PAPER_SIZES, invoicePageMarginMm, normalizeInvoicePaper } from '@moto/shared';
 import { usePosT } from '../i18n';
 import { invoiceFromSale, storeProfileFrom, type StoreProfile } from './invoiceModel';
@@ -15,8 +15,10 @@ export interface PrintContext {
   branchName?: string;
   cashier?: User | null;
   customer?: Customer | null;
-  /** Product details for compatibility rows (detailed mode). */
+  /** Product details for catalog labels and compatibility rows. */
   products?: Record<string, Product | undefined>;
+  brands?: Record<string, Brand | undefined>;
+  categories?: Record<string, Category | undefined>;
   models?: Record<string, MotorcycleModel | undefined>;
   terminalCode?: string;
   verifyBaseUrl?: string;

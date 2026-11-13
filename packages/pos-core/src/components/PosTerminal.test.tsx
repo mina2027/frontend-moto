@@ -34,6 +34,32 @@ const sale: Sale = {
   type: 'cash', status: 'completed',
 };
 
+const saleWithItem: Sale = {
+  ...sale,
+  items: [{ id: 'i1', productId: product.id, name: product.name, barcode: product.internalBarcode, sku: product.sku, partNumber: product.partNumber,
+    quantity: 1, listPrice: 100, unitPrice: 100, unitCost: 40, priceTier: 'retail1', discount: 0, discountPercent: 0, subtotal: 100, returnedQty: 0 }],
+};
+const printCatalogMeta = async () => ({
+  brands: [{ id: 'b1', name: { ar: 'ماركة الاختبار' }, country: { ar: '' } }],
+  categories: [{ id: 'c1', name: { ar: 'فئة الاختبار' }, parentId: null, ancestors: [], sortOrder: 0, isActive: true }],
+  models: [],
+});
+
+function expectPrintedCatalogColumns(element: HTMLElement, paper: string) {
+  const table = element.querySelector('table')!;
+  if (paper === 'a4') {
+    const headings = Array.from(table.querySelectorAll('thead th'), (th) => th.textContent);
+    expect(headings.slice(2, 5)).toEqual(['الماركة', 'الفئة', 'الباركود / SKU']);
+    const cells = table.querySelectorAll('tbody tr:first-child td');
+    expect(cells[2]!.textContent).toBe('ماركة الاختبار');
+    expect(cells[3]!.textContent).toBe('فئة الاختبار');
+    expect(cells[4]!.textContent).toBe(product.internalBarcode);
+  } else {
+    expect(table.textContent).not.toContain('ماركة الاختبار');
+    expect(table.textContent).not.toContain('فئة الاختبار');
+  }
+}
+
 function fakeAdapter(over: Partial<PosAdapter> = {}): PosAdapter {
   return {
     user,
@@ -774,13 +800,13 @@ describe('PosTerminal products and invoice printing', () => {
     ['فاتورة كبيرة', 'a4'],
   ])('saves the sale before printing %s using %s', async (label, paper) => {
     const store = cartStore();
-    const createSale = vi.fn(async () => sale);
+    const createSale = vi.fn(async () => saleWithItem);
     const branchName = vi.fn(() => 'فرع مدينة نصر');
     const print = vi.fn(async () => {
       expect(store.getState().lastSaleId).toBe(sale.id);
       expect(store.getState().lines).toHaveLength(0);
     });
-    await mount(store, { createSale, print, branchName });
+    await mount(store, { createSale, print, branchName, catalogMeta: printCatalogMeta });
     expect(screen.queryByRole('button', { name: 'طباعة فاتورة صغيرة' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'طباعة فاتورة كبيرة' })).toBeNull();
     await openPayment();
@@ -791,6 +817,7 @@ describe('PosTerminal products and invoice printing', () => {
     await waitFor(() => expect(print).toHaveBeenCalledTimes(1));
     const [element, profile] = print.mock.calls[0] as unknown as [HTMLElement, { paper: string }];
     expect(profile.paper).toBe(paper);
+    expectPrintedCatalogColumns(element, paper);
     expect(element.textContent).toContain(sale.invoiceNumber);
     expect(element.textContent).toContain('فرع مدينة نصر');
     expect(branchName).toHaveBeenCalledWith(sale.branchId);
@@ -874,11 +901,11 @@ describe('simple sale and printing flow', () => {
   ])('offers a size before F8 reprinting %s and prevents duplicate jobs', async (label, paper) => {
     const store = cartStore();
     store.getState().setLastSale(sale.id);
-    const savedSale = { ...sale, branchId: 'br-original' };
+    const savedSale = { ...saleWithItem, branchId: 'br-original' };
     const branchName = vi.fn((id: string) => id === savedSale.branchId ? 'فرع المعادي' : 'فرع مدينة نصر');
     const print = vi.fn(async () => undefined);
     const createSale = vi.fn();
-    await mount(store, { lastSale: async () => savedSale, createSale, print, branchName });
+    await mount(store, { lastSale: async () => savedSale, createSale, print, branchName, catalogMeta: printCatalogMeta });
     act(() => { fireEvent.keyDown(window, { key: 'F8' }); fireEvent.keyDown(window, { key: 'F8' }); });
     await waitFor(() => expect(screen.getByRole('dialog')).toBeTruthy());
     expect(print).not.toHaveBeenCalled();
@@ -888,6 +915,7 @@ describe('simple sale and printing flow', () => {
     await waitFor(() => expect(print).toHaveBeenCalledTimes(1));
     expect((print.mock.calls[0] as unknown as [HTMLElement, { paper: string }])[1].paper).toBe(paper);
     const element = (print.mock.calls[0] as unknown as [HTMLElement])[0];
+    expectPrintedCatalogColumns(element, paper);
     expect(element.textContent).toContain('فرع المعادي');
     expect(element.textContent).not.toContain('فرع مدينة نصر');
     expect(branchName).toHaveBeenCalledWith(savedSale.branchId);

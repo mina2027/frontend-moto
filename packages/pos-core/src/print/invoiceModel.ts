@@ -1,5 +1,5 @@
 import type { Locale, LocalizedText, PaymentMethod } from '@moto/shared';
-import { round2, tx } from '@moto/shared';
+import { productCategoryIds, round2, tx } from '@moto/shared';
 import type { PosTranslations } from '../i18n';
 import type { PrintContext } from './templates';
 
@@ -7,6 +7,9 @@ export type InvoiceSaleType = 'cash' | 'credit';
 
 export interface InvoiceLine {
   name: string;
+  /** Catalog details displayed on the large invoice only. */
+  brandName?: string;
+  categoryName?: string;
   /** Barcode or SKU printed in the code column. */
   sku: string;
   qty: number;
@@ -169,10 +172,15 @@ export function invoiceFromSale(ctx: PrintContext, locale: Locale, p: PosTransla
     return ids.map((id) => ctx.models?.[id]?.code).filter(Boolean).slice(0, 6).join(', ');
   };
   const items: InvoiceLine[] = sale.items.map((it) => {
+    const product = ctx.products?.[it.productId];
+    const brandName = product ? t(ctx.brands?.[product.brandId]?.name).trim() || undefined : undefined;
+    const categoryName = productCategoryIds(product)
+      .map((id) => t(ctx.categories?.[id]?.name).trim()).filter(Boolean)
+      .join(locale === 'ar' ? '، ' : ', ') || undefined;
     const notes: string[] = [];
     if (detailed && profile.showPartNumber && it.partNumber) notes.push(`${p.receipt.partNumber}: ${it.partNumber}`);
     if (detailed && profile.showCompatibility && fits(it.productId)) notes.push(`${p.receipt.fits}: ${fits(it.productId)}`);
-    return { name: t(it.name), sku: it.barcode || it.sku, qty: it.quantity, unitPrice: it.unitPrice, discount: it.discount, note: notes.join(' · ') || undefined };
+    return { name: t(it.name), brandName, categoryName, sku: it.barcode || it.sku, qty: it.quantity, unitPrice: it.unitPrice, discount: it.discount, note: notes.join(' · ') || undefined };
   });
   const invoiceDiscount = sale.invoiceDiscount;
   const taxable = round2(computeInvoiceTotals({ items, invoiceDiscount, taxRate: 0, paid: 0 }).taxable);

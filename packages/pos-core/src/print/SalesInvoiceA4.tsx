@@ -230,18 +230,22 @@ export const SalesInvoiceA4 = React.forwardRef<HTMLDivElement, SalesInvoiceA4Pro
       <div className="mpi-table-wrap">
         <table className="mpi-table">
           <colgroup>
-            <col style={{ width: '7%' }} />
-            <col style={{ width: '33%' }} />
-            <col style={{ width: '17%' }} />
-            <col style={{ width: '8%' }} />
-            <col style={{ width: '12%' }} />
+            <col style={{ width: '4%' }} />
+            <col style={{ width: '24%' }} />
             <col style={{ width: '10%' }} />
-            <col style={{ width: '13%' }} />
+            <col style={{ width: '12%' }} />
+            <col style={{ width: '15%' }} />
+            <col style={{ width: '6%' }} />
+            <col style={{ width: '10%' }} />
+            <col style={{ width: '8%' }} />
+            <col style={{ width: '11%' }} />
           </colgroup>
           <thead>
             <tr>
               <th>{L.index}</th>
               <th className="item">{L.item}</th>
+              <th>{L.brand}</th>
+              <th>{L.category}</th>
               <th>{L.code}</th>
               <th>{L.qty}</th>
               <th>{L.unitPrice}<small>({sym})</small></th>
@@ -258,6 +262,8 @@ export const SalesInvoiceA4 = React.forwardRef<HTMLDivElement, SalesInvoiceA4Pro
                     {it.name}
                     {it.note ? <span className="note">{it.note}</span> : null}
                   </td>
+                  <td className="item-brand"><bdi>{it.brandName || '—'}</bdi></td>
+                  <td className="item-category"><bdi>{it.categoryName || '—'}</bdi></td>
                   <td className="code mpi-num">{it.sku || '—'}</td>
                   <td className="mpi-num">{it.qty}</td>
                   <td className="mpi-num">{n(it.unitPrice)}</td>
@@ -266,7 +272,7 @@ export const SalesInvoiceA4 = React.forwardRef<HTMLDivElement, SalesInvoiceA4Pro
                 </tr>
               ))
             ) : (
-              <tr className="mpi-empty"><td colSpan={7}>—</td></tr>
+              <tr className="mpi-empty"><td colSpan={9}>—</td></tr>
             )}
           </tbody>
         </table>

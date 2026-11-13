@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import { DEFAULT_SETTINGS, PAPER_SIZES, defaultPrintProfiles, type PaperKind, type PrintProfile, type Sale } from '@moto/shared';
+import { DEFAULT_SETTINGS, PAPER_SIZES, defaultPrintProfiles, type PaperKind, type PrintProfile, type Product, type Sale } from '@moto/shared';
+import { PosLocaleContext } from '../i18n';
 import { InvoiceDocument, pageStyleFor } from './templates';
 import { checkoutProfileForSize, profileForSize } from './profiles';
 
@@ -37,6 +38,52 @@ const profileFor = (paper: PaperKind, extra: Partial<PrintProfile> = {}): PrintP
 const papers: PaperKind[] = ['thermal80', 'a4'];
 
 describe('invoice templates across every paper size', () => {
+  it.each([
+    ['a4', 'compact', 'ar'], ['a4', 'detailed', 'ar'],
+    ['a4', 'compact', 'en'], ['a4', 'detailed', 'en'],
+    ['thermal80', 'compact', 'ar'], ['thermal80', 'detailed', 'en'],
+  ] as const)('prints brand and category columns only on %s in %s mode (%s)', (paper, detail, locale) => {
+    const product: Product = {
+      id: 'p1', name: sale.items[0]!.name, internalBarcode: 'MP000011', sku: 'SKU-1', partNumber: 'HND-13011',
+      brandId: 'brand1', categoryId: 'category1', categoryIds: ['category1', 'category2'], supplierId: '',
+      purchasePrice: 220, lastPurchaseCost: 220, prices: { retail1: 350, retail2: 350, wholesale: 350 },
+      minStock: 0, unit: { ar: 'قطعة' }, compatibleModelIds: [], alternativeProductIds: [], isActive: true, createdAt: '', updatedAt: '',
+    };
+    const brand = { id: 'brand1', name: { ar: 'ماركة الاختبار', en: 'Test brand' }, country: { ar: '' } };
+    const categories = [
+      { id: 'category1', name: { ar: 'فئة أولى', en: 'First category' }, parentId: null, ancestors: [], sortOrder: 0, isActive: true },
+      { id: 'category2', name: { ar: 'فئة ثانية', en: 'Second category' }, parentId: null, ancestors: [], sortOrder: 1, isActive: true },
+    ];
+    const { container } = render(
+      <PosLocaleContext.Provider value={locale}>
+        <InvoiceDocument sale={sale} profile={profileFor(paper, { detail })} settings={DEFAULT_SETTINGS}
+          products={{ p1: product }} brands={{ brand1: brand }} categories={Object.fromEntries(categories.map((c) => [c.id, c]))} />
+      </PosLocaleContext.Provider>,
+    );
+    const table = container.querySelector('table')!;
+    const cells = table.querySelector('tbody tr')!.querySelectorAll('td');
+    if (paper === 'a4') {
+      const headings = Array.from(table.querySelectorAll('thead th'), (th) => th.textContent);
+      expect(headings.slice(2, 5)).toEqual(locale === 'ar' ? ['الماركة', 'الفئة', 'الباركود / SKU'] : ['Brand', 'Category', 'Barcode / SKU']);
+      expect(cells).toHaveLength(9);
+      expect(cells[2]!.textContent).toBe(locale === 'ar' ? 'ماركة الاختبار' : 'Test brand');
+      expect(cells[3]!.textContent).toBe(locale === 'ar' ? 'فئة أولى، فئة ثانية' : 'First category, Second category');
+      expect(cells[4]!.textContent).toBe('MP000011');
+      const missing = table.querySelectorAll('tbody tr')[1]!.querySelectorAll('td');
+      expect(missing[2]!.textContent).toBe('—');
+      expect(missing[3]!.textContent).toBe('—');
+    } else {
+      expect(table.querySelectorAll('thead th')).toHaveLength(5);
+      expect(table.textContent).not.toContain(locale === 'ar' ? 'ماركة الاختبار' : 'Test brand');
+      expect(table.textContent).not.toContain(locale === 'ar' ? 'فئة أولى' : 'First category');
+    }
+  });
+
+  it('spans all nine columns for an empty large invoice', () => {
+    const { container } = render(<InvoiceDocument sale={{ ...sale, items: [] }} profile={profileFor('a4')} settings={DEFAULT_SETTINGS} />);
+    expect(container.querySelector('.mpi-empty td')!.getAttribute('colspan')).toBe('9');
+  });
+
   it.each(papers)('prints saved multiline invoice notes on %s', (paper) => {
     const notes = 'تسليم غداً\nالاتصال قبل التسليم <script>';
     const { container } = render(<InvoiceDocument sale={{ ...sale, notes }} profile={profileFor(paper)} settings={DEFAULT_SETTINGS} />);

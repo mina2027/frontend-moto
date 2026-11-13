@@ -138,6 +138,8 @@ function PosTerminalInner({ adapter, store = defaultStore, verifyBaseUrl, classN
   const metadataQ = useQuery({ queryKey: ['pos', 'catalogMeta'], queryFn: () => adapter.catalogMeta!(), enabled: Boolean(adapter.catalogMeta), staleTime: 60_000, refetchOnWindowFocus: 'always', refetchOnReconnect: 'always' });
   const categoryNames = React.useMemo(() => new Map((metadataQ.data?.categories ?? []).map((category) => [category.id, tx(category.name)])), [metadataQ.data?.categories, tx]);
   const categoryLabel = (product?: PosProduct) => productCategoryIds(product).map((id) => categoryNames.get(id)).filter(Boolean).join(locale === 'ar' ? '، ' : ', ') || '—';
+  const brandNames = React.useMemo(() => new Map((metadataQ.data?.brands ?? []).map((brand) => [brand.id, tx(brand.name)])), [metadataQ.data?.brands, tx]);
+  const brandLabel = (product?: PosProduct) => brandNames.get(product?.brandId ?? '') || '—';
   const sessionQ = useQuery({ queryKey: ['pos', 'session'], queryFn: () => adapter.currentSession(), refetchInterval: 30_000 });
   // Unfinished legacy carts must use a current catalog price before checkout.
   React.useEffect(() => {
@@ -490,11 +492,12 @@ function PosTerminalInner({ adapter, store = defaultStore, verifyBaseUrl, classN
     return (
       <tr key={l.productId} onClick={() => setSelectedLine(l.productId)} className={cn('border-b text-sm transition-colors last:border-0', selected ? 'bg-primary/10' : 'hover:bg-muted/50')}>
         <td className="px-2 py-1.5">
-          <ProductChooser open={productFor === l.productId} onOpenChange={(open) => { setTierFor(null); setProductFor(open ? l.productId : null); }} catalog={filteredProducts} categoryLabel={categoryLabel} loading={catalogQ.isPending} error={catalogQ.isError} onRetry={() => void catalogQ.refetch()} settings={settings} tier={pos.priceTier} sort={filters.sort} current={l.productId} label={tx(l.name)} onPick={(prod) => chooseProduct(prod, l.productId)} />
+          <ProductChooser open={productFor === l.productId} onOpenChange={(open) => { setTierFor(null); setProductFor(open ? l.productId : null); }} catalog={filteredProducts} categoryLabel={categoryLabel} brandLabel={brandLabel} loading={catalogQ.isPending} error={catalogQ.isError} onRetry={() => void catalogQ.refetch()} settings={settings} tier={pos.priceTier} sort={filters.sort} current={l.productId} label={tx(l.name)} onPick={(prod) => chooseProduct(prod, l.productId)} />
           <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 break-words text-xs text-muted-foreground">
             {l.partNumber ? <span>{p.receipt.partNumber}: <bdi className="num">{l.partNumber}</bdi></span> : null}
             {prod?.size ? <span>{p.productSize}: <bdi className="num">{prod.size}</bdi></span> : null}
             <span>{p.catalogFilters.category}: {categoryLabel(prod)}</span>
+            <span>{p.catalogFilters.brand}: {brandLabel(prod)}</span>
             <span>{p.stock}: <bdi className="num">{available}</bdi></span>
             <span>{p.shelf}: {prod?.location || '—'}</span>
             <SimpleTooltip content={`${p.alternatives} (Alt+A)`}>
@@ -547,6 +550,8 @@ function PosTerminalInner({ adapter, store = defaultStore, verifyBaseUrl, classN
     cashier: adapter.user,
     customer: (customersQ.data ?? []).find((c) => c.id === sale.customerId) ?? null,
     products: Object.fromEntries((catalogQ.data ?? []).map((c) => [c.id, c])),
+    brands: Object.fromEntries((metadataQ.data?.brands ?? []).map((b) => [b.id, b])),
+    categories: Object.fromEntries((metadataQ.data?.categories ?? []).map((c) => [c.id, c])),
     terminalCode: adapter.terminalCode,
     verifyBaseUrl,
   });
@@ -607,7 +612,7 @@ function PosTerminalInner({ adapter, store = defaultStore, verifyBaseUrl, classN
                 <tr><th className="px-2 py-1.5 text-start font-medium">{p.product}</th><th className="w-20 px-2 py-1.5 text-center font-medium">{p.quantity}</th><th className="w-32 px-2 py-1.5 text-end font-medium">{p.price}</th><th className="w-28 px-2 py-1.5 text-end font-medium">{p.lineValue}</th><th className="w-8"><span className="sr-only">{p.delete}</span></th></tr>
               </thead>
               <tbody>{pos.lines.map(cashierLine)}<tr>
-                <td className="p-2"><ProductChooser open={productFor === 'new'} onOpenChange={(open) => { setTierFor(null); setProductFor(open ? 'new' : null); }} catalog={filteredProducts} categoryLabel={categoryLabel} loading={catalogQ.isPending} error={catalogQ.isError} onRetry={() => void catalogQ.refetch()} settings={settings} tier={pos.priceTier} sort={filters.sort} onPick={(prod) => chooseProduct(prod)} /></td>
+                <td className="p-2"><ProductChooser open={productFor === 'new'} onOpenChange={(open) => { setTierFor(null); setProductFor(open ? 'new' : null); }} catalog={filteredProducts} categoryLabel={categoryLabel} brandLabel={brandLabel} loading={catalogQ.isPending} error={catalogQ.isError} onRetry={() => void catalogQ.refetch()} settings={settings} tier={pos.priceTier} sort={filters.sort} onPick={(prod) => chooseProduct(prod)} /></td>
                 <td className="p-2 text-center text-muted-foreground">—</td><td className="p-2 text-end text-muted-foreground">—</td><td className="p-2 text-end text-muted-foreground">—</td><td />
               </tr></tbody>
             </table>
@@ -632,7 +637,7 @@ function PosTerminalInner({ adapter, store = defaultStore, verifyBaseUrl, classN
                       <button key={prod.id} type="button" aria-label={`${p.quickProducts.add}: ${tx(prod.name)}`} disabled={prod.available - quantity < 1} onClick={() => addProduct(prod)} className="flex min-w-0 flex-col gap-1 rounded-md border bg-background p-2 text-start hover:border-primary hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50">
                         <span className="break-words text-sm font-medium">{tx(prod.name)}</span>
                         <span className="text-sm font-semibold num">{m(resolvePrice(prod, pos.priceTier).price)}</span>
-                        <span className="flex flex-wrap gap-x-2 text-[11px] text-muted-foreground"><span>{p.catalogFilters.category}: {categoryLabel(prod)}</span><span>{p.stock}: <bdi className="num">{prod.available}</bdi></span><span>{p.shelf}: {prod.location || '—'}</span></span>
+                        <span className="flex flex-wrap gap-x-2 text-[11px] text-muted-foreground"><span>{p.catalogFilters.category}: {categoryLabel(prod)}</span><span>{p.catalogFilters.brand}: {brandLabel(prod)}</span><span>{p.stock}: <bdi className="num">{prod.available}</bdi></span><span>{p.shelf}: {prod.location || '—'}</span></span>
                       </button>
                     );
                   })}

@@ -11,6 +11,7 @@ interface ProductChooserProps {
   onOpenChange: (open: boolean) => void;
   catalog: PosProduct[];
   categoryLabel?: (product: PosProduct) => string;
+  brandLabel?: (product: PosProduct) => string;
   loading: boolean;
   error: boolean;
   onRetry: () => void;
@@ -22,7 +23,7 @@ interface ProductChooserProps {
   onPick: (product: PosProduct) => void;
 }
 
-export function ProductChooser({ open, onOpenChange, catalog, categoryLabel, loading, error, onRetry, settings, tier, sort = 'name', current, label, onPick }: ProductChooserProps) {
+export function ProductChooser({ open, onOpenChange, catalog, categoryLabel, brandLabel, loading, error, onRetry, settings, tier, sort = 'name', current, label, onPick }: ProductChooserProps) {
   const { p, tx, locale } = usePosT();
   const [term, setTerm] = React.useState('');
   const [limit, setLimit] = React.useState(100);
@@ -47,6 +48,7 @@ export function ProductChooser({ open, onOpenChange, catalog, categoryLabel, loa
                 <span className="block break-words text-sm font-medium">{tx(prod.name)}</span>
                 <span className="mt-1 flex flex-wrap gap-x-3 text-[11px] text-muted-foreground">
                   <span>{p.catalogFilters.category}: {categoryLabel?.(prod) || '—'}</span>
+                  <span>{p.catalogFilters.brand}: {brandLabel?.(prod) || '—'}</span>
                   <span>{p.stock}: <bdi className="num">{prod.available}</bdi></span>
                   <span>{p.shelf}: {prod.location || '—'}</span>
                 </span>
