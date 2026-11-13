@@ -72,18 +72,17 @@ const sheet = (primary: string, accent: string) => {
 .mpi-table-wrap { border: 1px solid ${INK}; border-radius: ${px(8)}; overflow: visible; }
 .mpi-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
 .mpi-table thead { display: table-header-group; }
-.mpi-table th { background: ${INK}; color: #fff; font-weight: 800; font-size: ${px(12.5)}; padding: ${mm(1.5)} ${mm(1.5)}; text-align: center; line-height: 1.25; border-inline-start: 1px solid ${PAPER}; }
-.mpi-table th:first-child { border-inline-start: 0; }
+.mpi-table th { background: ${INK}; color: #fff; font-weight: 800; font-size: ${px(12.5)}; padding: ${mm(1.5)} ${mm(1.5)}; text-align: center; line-height: 1.25; border-inline: 1.5px solid ${PAPER}; }
 .mpi-table th small { display: block; font-size: ${px(9.5)}; font-weight: 600; }
 .mpi-table th.item { text-align: start; padding-inline-start: ${mm(3)}; }
-.mpi-table td { padding: ${mm(1.15)} ${mm(1.5)}; text-align: center; font-weight: 700; border-top: 1px solid ${INK}; border-inline-start: 1px solid ${INK}; vertical-align: middle; }
-.mpi-table td:first-child { border-inline-start: 0; }
+.mpi-table th.qty { white-space: nowrap; }
+.mpi-table td { padding: ${mm(1.15)} ${mm(1.5)}; text-align: center; font-weight: 700; border-top: 1px solid ${INK}; border-inline: 1.5px solid ${INK}; vertical-align: middle; }
+.mpi-table td.qty { white-space: nowrap; }
 .mpi-table tbody tr:nth-child(even) td { background: ${PAPER}; }
 .mpi-table tr { break-inside: avoid; page-break-inside: avoid; }
 .mpi-table td.idx { color: ${INK}; font-weight: 900; }
 .mpi-table td.item { text-align: start; padding-inline-start: ${mm(3)}; font-weight: 700; }
 .mpi-table td.item .note { display: block; font-size: ${px(9.5)}; color: ${INK}; font-weight: 600; }
-.mpi-table td.code { font-weight: 600; font-size: ${px(11)}; color: ${INK}; letter-spacing: ${px(0.2)}; }
 .mpi-table td.total { font-weight: 900; color: ${INK}; }
 .mpi-empty td { height: ${mm(12)}; color: ${INK}; }
 
@@ -231,11 +230,10 @@ export const SalesInvoiceA4 = React.forwardRef<HTMLDivElement, SalesInvoiceA4Pro
         <table className="mpi-table">
           <colgroup>
             <col style={{ width: '4%' }} />
-            <col style={{ width: '24%' }} />
-            <col style={{ width: '10%' }} />
+            <col style={{ width: '31%' }} />
             <col style={{ width: '12%' }} />
             <col style={{ width: '15%' }} />
-            <col style={{ width: '6%' }} />
+            <col style={{ width: '9%' }} />
             <col style={{ width: '10%' }} />
             <col style={{ width: '8%' }} />
             <col style={{ width: '11%' }} />
@@ -246,8 +244,7 @@ export const SalesInvoiceA4 = React.forwardRef<HTMLDivElement, SalesInvoiceA4Pro
               <th className="item">{L.item}</th>
               <th>{L.brand}</th>
               <th>{L.category}</th>
-              <th>{L.code}</th>
-              <th>{L.qty}</th>
+              <th className="qty">{L.qty}</th>
               <th>{L.unitPrice}<small>({sym})</small></th>
               <th>{L.discount}<small>({sym})</small></th>
               <th>{L.lineTotal}<small>({sym})</small></th>
@@ -264,15 +261,14 @@ export const SalesInvoiceA4 = React.forwardRef<HTMLDivElement, SalesInvoiceA4Pro
                   </td>
                   <td className="item-brand"><bdi>{it.brandName || '—'}</bdi></td>
                   <td className="item-category"><bdi>{it.categoryName || '—'}</bdi></td>
-                  <td className="code mpi-num">{it.sku || '—'}</td>
-                  <td className="mpi-num">{it.qty}</td>
+                  <td className="qty"><span className="mpi-num">{it.qty}</span></td>
                   <td className="mpi-num">{n(it.unitPrice)}</td>
                   <td className="mpi-num">{n(it.discount)}</td>
                   <td className="total mpi-num">{n(totals.lineTotals[i] ?? 0)}</td>
                 </tr>
               ))
             ) : (
-              <tr className="mpi-empty"><td colSpan={9}>—</td></tr>
+              <tr className="mpi-empty"><td colSpan={8}>—</td></tr>
             )}
           </tbody>
         </table>

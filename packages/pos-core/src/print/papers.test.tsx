@@ -64,11 +64,11 @@ describe('invoice templates across every paper size', () => {
     const cells = table.querySelector('tbody tr')!.querySelectorAll('td');
     if (paper === 'a4') {
       const headings = Array.from(table.querySelectorAll('thead th'), (th) => th.textContent);
-      expect(headings.slice(2, 5)).toEqual(locale === 'ar' ? ['الماركة', 'الفئة', 'الباركود / SKU'] : ['Brand', 'Category', 'Barcode / SKU']);
-      expect(cells).toHaveLength(9);
+      expect(headings.slice(2, 4)).toEqual(locale === 'ar' ? ['الماركة', 'الفئة'] : ['Brand', 'Category']);
+      expect(cells).toHaveLength(8);
       expect(cells[2]!.textContent).toBe(locale === 'ar' ? 'ماركة الاختبار' : 'Test brand');
       expect(cells[3]!.textContent).toBe(locale === 'ar' ? 'فئة أولى، فئة ثانية' : 'First category, Second category');
-      expect(cells[4]!.textContent).toBe('MP000011');
+      expect(cells[4]!.textContent).toBe('2');
       const missing = table.querySelectorAll('tbody tr')[1]!.querySelectorAll('td');
       expect(missing[2]!.textContent).toBe('—');
       expect(missing[3]!.textContent).toBe('—');
@@ -77,11 +77,16 @@ describe('invoice templates across every paper size', () => {
       expect(table.textContent).not.toContain(locale === 'ar' ? 'ماركة الاختبار' : 'Test brand');
       expect(table.textContent).not.toContain(locale === 'ar' ? 'فئة أولى' : 'First category');
     }
+    expect(table.textContent).not.toContain(locale === 'ar' ? 'الباركود / SKU' : 'Barcode / SKU');
+    for (const item of sale.items) {
+      expect(table.textContent).not.toContain(item.barcode);
+      expect(table.textContent).not.toContain(item.sku);
+    }
   });
 
-  it('spans all nine columns for an empty large invoice', () => {
+  it('spans all eight columns for an empty large invoice', () => {
     const { container } = render(<InvoiceDocument sale={{ ...sale, items: [] }} profile={profileFor('a4')} settings={DEFAULT_SETTINGS} />);
-    expect(container.querySelector('.mpi-empty td')!.getAttribute('colspan')).toBe('9');
+    expect(container.querySelector('.mpi-empty td')!.getAttribute('colspan')).toBe('8');
   });
 
   it.each(papers)('prints saved multiline invoice notes on %s', (paper) => {
@@ -156,7 +161,7 @@ describe('invoice templates across every paper size', () => {
     const receipt = container.querySelector('.mpt')!;
     for (const note of warrantyNotes) expect(receipt.textContent).toContain(note);
     expect(receipt.textContent).toContain('HND-13011');
-    expect(receipt.textContent).toContain('MP000011');
+    expect(receipt.textContent).not.toContain('MP000011');
     expect(receipt.textContent).toContain('HND-06430');
     expect(receipt.querySelectorAll('.mpt-sign-box')).toHaveLength(1);
     expect(receipt.querySelectorAll('.mpt-sign-line')).toHaveLength(2);

@@ -58,10 +58,10 @@ const sheet = (primary: string, accent: string) => {
 
 .mpt-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
 .mpt-table thead { display: table-header-group; }
-.mpt-table th { background: ${INK}; color: #fff; font-weight: 800; font-size: ${px(10)}; padding: ${mm(1)} ${mm(0.8)}; text-align: center; line-height: 1.2; }
+.mpt-table th { background: ${INK}; color: #fff; font-weight: 800; font-size: ${px(10)}; padding: ${mm(1)} ${mm(0.8)}; text-align: center; line-height: 1.2; border-inline: 1px solid #fff; }
 .mpt-table th.item { text-align: start; padding-inline-start: ${mm(1.5)}; }
 .mpt-table th small { display: block; font-size: ${px(8)}; }
-.mpt-table td { padding: ${mm(0.9)} ${mm(0.8)}; text-align: center; font-weight: 700; font-size: ${px(10.5)}; border-top: 1px solid ${INK}; vertical-align: top; }
+.mpt-table td { padding: ${mm(0.9)} ${mm(0.8)}; text-align: center; font-weight: 700; font-size: ${px(10.5)}; border-top: 1px solid ${INK}; border-inline: 1px solid ${INK}; vertical-align: top; }
 .mpt-table tbody tr:nth-child(even) td { background: #fff; }
 .mpt-table tr { break-inside: avoid; page-break-inside: avoid; }
 .mpt-table td.idx { color: ${INK}; font-weight: 900; }
@@ -202,7 +202,6 @@ export const SalesInvoiceThermal = React.forwardRef<HTMLDivElement, SalesInvoice
                 <td className="idx mpt-num">{i + 1}</td>
                 <td className="item">
                   {it.name}
-                  <span className="note">{L.code}: <span className="mpt-num">{it.sku || '—'}</span></span>
                   {it.note ? <span className="note">{it.note}</span> : null}
                   <span className={it.discount > 0 ? 'note disc' : 'note'}>{L.discount}: <span className="mpt-num">{it.discount > 0 ? '-' : ''}{n(it.discount)} {sym}</span></span>
                 </td>

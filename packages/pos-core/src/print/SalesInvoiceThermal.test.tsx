@@ -23,10 +23,11 @@ describe('SalesInvoiceThermal', () => {
     expect(styles).not.toContain('watermark');
     expect(receipt.querySelector('.mpt-watermark')).toBeNull();
     for (const detail of [invoice.number, invoice.branch, invoice.cashier, invoice.terminal,
-      invoice.items[0].sku, invoice.items[0].note, store.slogan, store.taxNumber, ...store.warrantyNotes,
+      invoice.items[0].note, store.slogan, store.taxNumber, ...store.warrantyNotes,
       ...store.brandLogos.map(brand => brand.name)]) {
       expect(receipt.textContent).toContain(detail);
     }
+    expect(receipt.textContent).not.toContain(invoice.items[0].sku);
     expect(receipt.textContent).toContain('آجل');
     expect(receipt.textContent).toContain('200.00 ج.م');
     expect(receipt.textContent).toContain('-5.00 ج.م');

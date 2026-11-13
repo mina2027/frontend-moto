@@ -10,7 +10,7 @@ export interface InvoiceLine {
   /** Catalog details displayed on the large invoice only. */
   brandName?: string;
   categoryName?: string;
-  /** Barcode or SKU printed in the code column. */
+  /** Barcode or SKU retained for item identification. */
   sku: string;
   qty: number;
   unitPrice: number;
